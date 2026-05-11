@@ -235,7 +235,6 @@
         const tamanhos = ['P', 'M', 'G'];
         tamanhos.forEach(tamanho => {
             if (document.getElementById(`chk_${tamanho}`).checked) {
-                const preco = parseFloat(document.getElementById(`preco_${tamanho}`).value) || 0;
                 const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
                 const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
 
@@ -248,7 +247,6 @@
                 actions.push(['AddRecord', 'Catalogo_Filial', {
                     'Filial': filial,
                     'Produto': nomeFinalProduto,
-                    'Preco_Venda': preco,
                     'Categoria': 'Encomendas',
                     'Tamanho': `${tamanho}`
                 }]);
