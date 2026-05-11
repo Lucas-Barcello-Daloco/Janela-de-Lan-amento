@@ -117,15 +117,13 @@
 </div>
 
 <script>
-    // 1. Diz para o Grist que o Widget quer acesso total
     grist.ready({ requiredAccess: 'full' });
 
-    // 2. Função assíncrona para buscar os dados sem travar a tela
     async function carregarDadosDoBanco() {
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas');
+            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); // ATUALIZADO AQUI
 
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
@@ -154,7 +152,6 @@
         }
     }
 
-    // 3. Executa a função de carregamento
     carregarDadosDoBanco();
 
     function adicionarLinhaIngrediente() {
@@ -212,7 +209,8 @@
         
         const actions = []; 
 
-        actions.push(['AddRecord', 'Cadastro_Receitas', {
+        // ATUALIZADO AQUI
+        actions.push(['AddRecord', 'Cadastro_de_Receitas', {
             'Nome_da_Receita': nomeReceita
         }]);
 
