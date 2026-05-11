@@ -117,9 +117,11 @@
 </div>
 
 <script>
+    // 1. Diz para o Grist que o Widget quer acesso total
     grist.ready({ requiredAccess: 'full' });
 
-    grist.onReady(async () => {
+    // 2. Função assíncrona para buscar os dados sem travar a tela
+    async function carregarDadosDoBanco() {
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
@@ -147,10 +149,13 @@
 
         } catch (error) {
             console.error("Erro ao carregar dados do Grist:", error);
-            document.getElementById('status-loading').innerText = "Erro ao ler banco de dados. Verifique o acesso do Widget.";
+            document.getElementById('status-loading').innerText = "Erro ao ler banco de dados. Verifique os nomes das tabelas no código.";
             document.getElementById('status-loading').style.color = "red";
         }
-    });
+    }
+
+    // 3. Executa a função de carregamento
+    carregarDadosDoBanco();
 
     function adicionarLinhaIngrediente() {
         const container = document.getElementById('lista-ingredientes-container');
@@ -229,7 +234,6 @@
                 camposComposicao['Quantidade_Usada'] = qtd; 
             }
 
-            // ATUALIZADO AQUI PARA A TABELA COM NOME "RECEITAS"
             actions.push(['AddRecord', 'RECEITAS', camposComposicao]);
         });
 
