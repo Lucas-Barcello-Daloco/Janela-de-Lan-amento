@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engenharia de Produto - Grist</title>
+    <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #eef2f5; color: #333; }
+        .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 800px; margin: 0 auto; }
+        h2, h3 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; margin-bottom: 15px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        
+        .variacao-grid { display: grid; grid-template-columns: 50px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #3498db; }
+        .ingrediente-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #fdfbf7; padding: 10px; border: 1px solid #e1d8c1; border-radius: 4px; }
+        
+        button.btn-add { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
+        button.btn-add:hover { background: #2980b9; }
+        button.btn-remove { background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+        button.btn-submit { background: #27ae60; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 20px; }
+        button.btn-submit:hover { background: #219653; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; }
+        
+        .info-text { font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px; }
+        #status-loading { color: #e67e22; font-weight: bold; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Lançamento Estruturado de Produto</h2>
+    
+    <div id="status-loading">Sincronizando com o banco de dados... aguarde.</div>
+
+    <form id="form-produtos" style="display: none;">
+        
+        <datalist id="lista-filiais"></datalist>
+        <datalist id="lista-insumos"></datalist>
+        <datalist id="lista-receitas"></datalist>
+
+        <div class="form-group">
+            <label>Filial:</label>
+            <input type="text" id="filial" list="lista-filiais" required placeholder="Selecione ou digite a filial">
+        </div>
+        <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+                <label>Nome da Receita Base (Ex: OVO-ALFAJOR):</label>
+                <input type="text" id="nome_receita" list="lista-receitas" required placeholder="Selecione ou crie nova">
+            </div>
+            <div>
+                <label>Nome Final do Produto (Ex: ALFAJOR):</label>
+                <input type="text" id="produto_base" required placeholder="Gerará: OVO G ALFAJOR, etc.">
+            </div>
+        </div>
+
+        <h3>1. Composição da Ficha Técnica</h3>
+        <p class="info-text">Insira os ingredientes da Receita Base.</p>
+        
+        <div id="lista-ingredientes-container"></div>
+        <button type="button" class="btn-add" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
+
+        <h3>2. Criação dos Produtos e Preços</h3>
+        <p class="info-text">Selecione o rendimento. O sistema cadastrará em "Produtos" e no "Catálogo_Filial".</p>
+        
+        <div class="variacao-grid">
+            <div><input type="checkbox" id="chk_P" value="P"> <label for="chk_P">P</label></div>
+            <div><label>Preço Venda (R$)</label><input type="number" id="preco_P" step="0.01"></div>
+            <div>
+                <label>Rendimento</label>
+                <select id="fator_P">
+                    <option value="1">Rende 1 un. (Fator 1.0)</option>
+                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
+                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
+                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
+                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
+                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="variacao-grid">
+            <div><input type="checkbox" id="chk_M" value="M"> <label for="chk_M">M</label></div>
+            <div><label>Preço Venda (R$)</label><input type="number" id="preco_M" step="0.01"></div>
+            <div>
+                <label>Rendimento</label>
+                <select id="fator_M">
+                    <option value="1">Rende 1 un. (Fator 1.0)</option>
+                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
+                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
+                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
+                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
+                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="variacao-grid">
+            <div><input type="checkbox" id="chk_G" value="G"> <label for="chk_G">G</label></div>
+            <div><label>Preço Venda (R$)</label><input type="number" id="preco_G" step="0.01"></div>
+            <div>
+                <label>Rendimento</label>
+                <select id="fator_G">
+                    <option value="1">Rende 1 un. (Fator 1.0)</option>
+                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
+                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
+                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
+                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
+                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-submit">Processar Cadastro Completo</button>
+    </form>
+</div>
+
+<script>
+    grist.ready({ requiredAccess: 'full' });
+
+    // Função que carrega os dados reais do Grist assim que o widget abre
+    grist.onReady(async () => {
+        try {
+            // Lendo as tabelas do seu Grist
+            const filiaisData = await grist.docApi.fetchTable('Filiais');
+            const insumosData = await grist.docApi.fetchTable('Insumos');
+            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas');
+
+            // Preenchendo as opções de Filiais
+            const datalistFiliais = document.getElementById('lista-filiais');
+            // Assumindo que a coluna de nome na tabela Filiais seja 'id' ou um nome principal.
+            // Pelo print, parecem ser IDs de filiais (ex: Região M...). Ajuste se o nome da coluna for diferente.
+            if(filiaisData.id) {
+                filiaisData.id.forEach(idFilial => {
+                    datalistFiliais.innerHTML += `<option value="${idFilial}">`;
+                });
+            }
+
+            // Preenchendo as opções de Insumos (Coluna 'Nome')
+            const datalistInsumos = document.getElementById('lista-insumos');
+            if(insumosData.Nome) {
+                insumosData.Nome.forEach(nome => {
+                    datalistInsumos.innerHTML += `<option value="${nome}">`;
+                });
+            }
+
+            // Preenchendo as opções de Receitas (Coluna 'Nome_da_Receita' ou 'id')
+            const datalistReceitas = document.getElementById('lista-receitas');
+            if(receitasData.Nome_da_Receita) {
+                receitasData.Nome_da_Receita.forEach(nome => {
+                    datalistReceitas.innerHTML += `<option value="${nome}">`;
+                });
+            } else if (receitasData.id) {
+                 receitasData.id.forEach(nome => {
+                    datalistReceitas.innerHTML += `<option value="${nome}">`;
+                });
+            }
+
+            // Oculta a mensagem de carregamento e mostra o formulário
+            document.getElementById('status-loading').style.display = 'none';
+            document.getElementById('form-produtos').style.display = 'block';
+
+        } catch (error) {
+            console.error("Erro ao carregar dados do Grist:", error);
+            document.getElementById('status-loading').innerText = "Erro ao ler banco de dados. Verifique o acesso do Widget.";
+            document.getElementById('status-loading').style.color = "red";
+        }
+    });
+
+    // Função para adicionar linha e vincular os datalists correspondentes
+    function adicionarLinhaIngrediente() {
+        const container = document.getElementById('lista-ingredientes-container');
+        const idLinha = Date.now();
+        
+        const div = document.createElement('div');
+        div.className = 'ingrediente-row';
+        div.id = `ingrediente-${idLinha}`;
+        
+        div.innerHTML = `
+            <div>
+                <label>Insumo ou Sub-receita</label>
+                <input type="text" class="ing-nome" list="lista-insumos" required placeholder="Digite para buscar...">
+            </div>
+            <div>
+                <label>Tipo</label>
+                <select class="ing-tipo" onchange="atualizarDatalist(this, ${idLinha})">
+                    <option value="Insumo">Insumo</option>
+                    <option value="Sub_Receita">Sub-receita</option>
+                </select>
+            </div>
+            <div>
+                <label>Quantidade</label>
+                <input type="number" class="ing-qtd" step="0.01" required placeholder="Ex: 140">
+            </div>
+            <div>
+                <button type="button" class="btn-remove" onclick="removerLinha(${idLinha})">X</button>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+
+    // Altera a lista de autocomplete dependendo se o usuário escolheu Insumo ou Sub-receita
+    function atualizarDatalist(selectElement, idLinha) {
+        const inputNome = document.querySelector(`#ingrediente-${idLinha} .ing-nome`);
+        if (selectElement.value === 'Insumo') {
+            inputNome.setAttribute('list', 'lista-insumos');
+        } else {
+            inputNome.setAttribute('list', 'lista-receitas');
+        }
+        inputNome.value = ""; // Limpa o campo para nova busca
+    }
+
+    function removerLinha(id) {
+        document.getElementById(`ingrediente-${id}`).remove();
+    }
+
+    document.getElementById('form-produtos').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const filial = document.getElementById('filial').value;
+        const nomeReceita = document.getElementById('nome_receita').value;
+        const produtoBase = document.getElementById('produto_base').value;
+        const btnSubmit = document.querySelector('.btn-submit');
+        
+        const actions = []; 
+
+        // 1. Opcional: Adicionar a receita caso não exista. O Grist ignora a criação se a lógica da tabela impedir duplicação.
+        actions.push(['AddRecord', 'Cadastro_Receitas', {
+            'Nome_da_Receita': nomeReceita
+        }]);
+
+        // 2. Composição da Receita
+        const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
+        linhasIngredientes.forEach(linha => {
+            const nomeIng = linha.querySelector('.ing-nome').value;
+            const tipo = linha.querySelector('.ing-tipo').value;
+            const qtd = parseFloat(linha.querySelector('.ing-qtd').value);
+
+            let camposComposicao = {
+                'ID_Nome': nomeReceita 
+            };
+
+            if (tipo === 'Insumo') {
+                camposComposicao['Insumo'] = nomeIng;
+                camposComposicao['Quantidade'] = qtd;
+            } else {
+                camposComposicao['Sub_Receita'] = nomeIng;
+                camposComposicao['Quantidade_Usada'] = qtd; 
+            }
+
+            actions.push(['AddRecord', 'Composicao_Receita', camposComposicao]);
+        });
+
+        // 3. Criar os Produtos
+        const tamanhos = ['P', 'M', 'G'];
+        tamanhos.forEach(tamanho => {
+            if (document.getElementById(`chk_${tamanho}`).checked) {
+                const preco = parseFloat(document.getElementById(`preco_${tamanho}`).value) || 0;
+                const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
+                const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
+
+                actions.push(['AddRecord', 'Produtos', {
+                    'Nome': nomeFinalProduto,
+                    'Receita': nomeReceita,
+                    'Fator_de_Rendimento': fatorRendimento
+                }]);
+
+                actions.push(['AddRecord', 'Catalogo_Filial', {
+                    'Filial': filial,
+                    'Produto': nomeFinalProduto,
+                    'Preco_Venda': preco,
+                    'Categoria': 'Encomendas',
+                    'Tamanho': `${tamanho}`
+                }]);
+            }
+        });
+
+        if (actions.length <= 1) { 
+            alert('Adicione pelo menos um tamanho e ingredientes!');
+            return;
+        }
+
+        try {
+            btnSubmit.innerText = 'Processando...';
+            btnSubmit.disabled = true;
+
+            await grist.docApi.applyUserActions(actions);
+            
+            alert('Cadastro efetuado com sucesso!');
+            document.getElementById('form-produtos').reset();
+            document.getElementById('lista-ingredientes-container').innerHTML = '';
+            adicionarLinhaIngrediente(); 
+
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao salvar no Grist: ' + error.message);
+        } finally {
+            btnSubmit.innerText = 'Processar Cadastro Completo';
+            btnSubmit.disabled = false;
+        }
+    });
+
+    adicionarLinhaIngrediente();
+</script>
+
+</body>
+</html>
