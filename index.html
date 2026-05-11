@@ -42,7 +42,7 @@
 
         <div class="form-group">
             <label>Filial:</label>
-            <input type="text" id="filial" list="lista-filiais" required placeholder="Selecione ou digite a filial">
+            <input type="text" id="filial" list="lista-filiais" required placeholder="Selecione a filial">
         </div>
         <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div>
@@ -119,45 +119,29 @@
 <script>
     grist.ready({ requiredAccess: 'full' });
 
-    // Função que carrega os dados reais do Grist assim que o widget abre
     grist.onReady(async () => {
         try {
-            // Lendo as tabelas do seu Grist
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
             const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas');
 
-            // Preenchendo as opções de Filiais
             const datalistFiliais = document.getElementById('lista-filiais');
-            // Assumindo que a coluna de nome na tabela Filiais seja 'id' ou um nome principal.
-            // Pelo print, parecem ser IDs de filiais (ex: Região M...). Ajuste se o nome da coluna for diferente.
             if(filiaisData.id) {
-                filiaisData.id.forEach(idFilial => {
-                    datalistFiliais.innerHTML += `<option value="${idFilial}">`;
-                });
+                filiaisData.id.forEach(idFilial => { datalistFiliais.innerHTML += `<option value="${idFilial}">`; });
             }
 
-            // Preenchendo as opções de Insumos (Coluna 'Nome')
             const datalistInsumos = document.getElementById('lista-insumos');
             if(insumosData.Nome) {
-                insumosData.Nome.forEach(nome => {
-                    datalistInsumos.innerHTML += `<option value="${nome}">`;
-                });
+                insumosData.Nome.forEach(nome => { datalistInsumos.innerHTML += `<option value="${nome}">`; });
             }
 
-            // Preenchendo as opções de Receitas (Coluna 'Nome_da_Receita' ou 'id')
             const datalistReceitas = document.getElementById('lista-receitas');
             if(receitasData.Nome_da_Receita) {
-                receitasData.Nome_da_Receita.forEach(nome => {
-                    datalistReceitas.innerHTML += `<option value="${nome}">`;
-                });
+                receitasData.Nome_da_Receita.forEach(nome => { datalistReceitas.innerHTML += `<option value="${nome}">`; });
             } else if (receitasData.id) {
-                 receitasData.id.forEach(nome => {
-                    datalistReceitas.innerHTML += `<option value="${nome}">`;
-                });
+                 receitasData.id.forEach(nome => { datalistReceitas.innerHTML += `<option value="${nome}">`; });
             }
 
-            // Oculta a mensagem de carregamento e mostra o formulário
             document.getElementById('status-loading').style.display = 'none';
             document.getElementById('form-produtos').style.display = 'block';
 
@@ -168,7 +152,6 @@
         }
     });
 
-    // Função para adicionar linha e vincular os datalists correspondentes
     function adicionarLinhaIngrediente() {
         const container = document.getElementById('lista-ingredientes-container');
         const idLinha = Date.now();
@@ -200,7 +183,6 @@
         container.appendChild(div);
     }
 
-    // Altera a lista de autocomplete dependendo se o usuário escolheu Insumo ou Sub-receita
     function atualizarDatalist(selectElement, idLinha) {
         const inputNome = document.querySelector(`#ingrediente-${idLinha} .ing-nome`);
         if (selectElement.value === 'Insumo') {
@@ -208,7 +190,7 @@
         } else {
             inputNome.setAttribute('list', 'lista-receitas');
         }
-        inputNome.value = ""; // Limpa o campo para nova busca
+        inputNome.value = ""; 
     }
 
     function removerLinha(id) {
@@ -225,12 +207,10 @@
         
         const actions = []; 
 
-        // 1. Opcional: Adicionar a receita caso não exista. O Grist ignora a criação se a lógica da tabela impedir duplicação.
         actions.push(['AddRecord', 'Cadastro_Receitas', {
             'Nome_da_Receita': nomeReceita
         }]);
 
-        // 2. Composição da Receita
         const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
         linhasIngredientes.forEach(linha => {
             const nomeIng = linha.querySelector('.ing-nome').value;
@@ -249,10 +229,10 @@
                 camposComposicao['Quantidade_Usada'] = qtd; 
             }
 
-            actions.push(['AddRecord', 'Composicao_Receita', camposComposicao]);
+            // ATUALIZADO AQUI PARA A TABELA COM NOME "RECEITAS"
+            actions.push(['AddRecord', 'RECEITAS', camposComposicao]);
         });
 
-        // 3. Criar os Produtos
         const tamanhos = ['P', 'M', 'G'];
         tamanhos.forEach(tamanho => {
             if (document.getElementById(`chk_${tamanho}`).checked) {
