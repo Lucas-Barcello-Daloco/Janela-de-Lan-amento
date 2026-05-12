@@ -13,7 +13,7 @@
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
         input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         
-        /* Ajustei a grade para ter apenas 2 colunas agora que o preço saiu */
+        /* Grade em 2 colunas */
         .variacao-grid { display: grid; grid-template-columns: 50px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #3498db; }
         .ingrediente-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #fdfbf7; padding: 10px; border: 1px solid #e1d8c1; border-radius: 4px; }
         
@@ -63,7 +63,7 @@
         <button type="button" class="btn-add" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
 
         <h3>2. Criação dos Produtos</h3>
-        <p class="info-text">Selecione o rendimento. O preço será calculado automaticamente pelo Grist.</p>
+        <p class="info-text">Selecione o rendimento. O preço é calculado automaticamente pelo Grist.</p>
         
         <!-- P -->
         <div class="variacao-grid">
@@ -208,65 +208,76 @@
         const produtoBase = document.getElementById('produto_base').value;
         const btnSubmit = document.querySelector('.btn-submit');
         
-        const actions = []; 
-
-        actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
-            'Nome_da_Receita': nomeReceita
-        }]);
-
-        const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
-        linhasIngredientes.forEach(linha => {
-            const nomeIng = linha.querySelector('.ing-nome').value;
-            const tipo = linha.querySelector('.ing-tipo').value;
-            const qtd = parseFloat(linha.querySelector('.ing-qtd').value);
-
-            let camposComposicao = {
-                'ID_Nome': nomeReceita 
-            };
-
-            if (tipo === 'Insumo') {
-                camposComposicao['Insumo'] = nomeIng;
-                camposComposicao['Quantidade'] = qtd;
-            } else {
-                camposComposicao['Sub_Receita'] = nomeIng;
-                camposComposicao['Quantidade_Usada'] = qtd; 
-            }
-
-            // ATUALIZADO: Nome real da tabela no Grist
-            actions.push(['AddRecord', 'Composicao_Receita', null, camposComposicao]);
-        });
-
-        const tamanhos = ['P', 'M', 'G'];
-        tamanhos.forEach(tamanho => {
-            if (document.getElementById(`chk_${tamanho}`).checked) {
-                const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
-                const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
-
-                actions.push(['AddRecord', 'Produtos', null, {
-                    'Nome': nomeFinalProduto,
-                    'Receita': nomeReceita,
-                    'Fator_de_Rendimento': fatorRendimento
-                }]);
-
-                // ATUALIZADO: Preço_Venda foi removido
-                actions.push(['AddRecord', 'Catalogo_Filial', null, {
-                    'Filial': filial,
-                    'Produto': nomeFinalProduto,
-                    'Categoria': 'Encomendas',
-                    'Tamanho': `${tamanho}`
-                }]);
-            }
-        });
-
-        if (actions.length <= 1) { 
-            alert('Adicione pelo menos um tamanho e ingredientes!');
-            return;
-        }
-
         try {
             btnSubmit.innerText = 'Processando...';
             btnSubmit.disabled = true;
 
+            const actions = []; 
+            
+            // PREVENÇÃO DE DUPLICIDADE: Busca as receitas existentes no momento do envio
+            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas');
+            const receitasExistentes = receitasData.Nome_da_Receita || [];
+
+            // Apenas adiciona a Receita Base se ela NÃO existir ainda no banco
+            if (!receitasExistentes.includes(nomeReceita)) {
+                actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
+                    'Nome_da_Receita': nomeReceita
+                }]);
+            }
+
+            const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
+            linhasIngredientes.forEach(linha => {
+                const nomeIng = linha.querySelector('.ing-nome').value;
+                const tipo = linha.querySelector('.ing-tipo').value;
+                const qtd = parseFloat(linha.querySelector('.ing-qtd').value);
+
+                let camposComposicao = {
+                    'ID_Nome': nomeReceita 
+                };
+
+                if (tipo === 'Insumo') {
+                    camposComposicao['Insumo'] = nomeIng;
+                    camposComposicao['Quantidade'] = qtd;
+                } else {
+                    camposComposicao['Sub_Receita'] = nomeIng;
+                    camposComposicao['Quantidade_Usada'] = qtd; 
+                }
+
+                actions.push(['AddRecord', 'Composicao_Receita', null, camposComposicao]);
+            });
+
+            const tamanhos = ['P', 'M', 'G'];
+            let adicionouTamanho = false;
+            
+            tamanhos.forEach(tamanho => {
+                if (document.getElementById(`chk_${tamanho}`).checked) {
+                    adicionouTamanho = true;
+                    const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
+                    const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
+
+                    actions.push(['AddRecord', 'Produtos', null, {
+                        'Nome': nomeFinalProduto,
+                        'Receita': nomeReceita,
+                        'Fator_de_Rendimento': fatorRendimento
+                    }]);
+
+                    actions.push(['AddRecord', 'Catalogo_Filial', null, {
+                        'Filial': filial,
+                        'Produto': nomeFinalProduto,
+                        'Categoria': 'Encomendas',
+                        'Tamanho': `${tamanho}`
+                    }]);
+                }
+            });
+
+            if (!adicionouTamanho || linhasIngredientes.length === 0) { 
+                alert('Adicione pelo menos um tamanho e um ingrediente!');
+                btnSubmit.innerText = 'Processar Cadastro Completo';
+                btnSubmit.disabled = false;
+                return;
+            }
+
+            // Dispara todas as ações em lote
             await grist.docApi.applyUserActions(actions);
             
             alert('Cadastro efetuado com sucesso!');
@@ -276,7 +287,12 @@
 
         } catch (error) {
             console.error(error);
-            alert('Erro ao salvar no Grist: ' + error.message);
+            // Mensagem tratada especificamente para o problema do KeyError que você enfrentou
+            if (error.message.includes('KeyError')) {
+                alert(`Erro interno de Fórmula no Grist!\nDetalhe: ${error.message}\nVerifique se alguma fórmula nas suas tabelas do Grist está tentando buscar um nome incorreto.`);
+            } else {
+                alert('Erro ao salvar no Grist: ' + error.message);
+            }
         } finally {
             btnSubmit.innerText = 'Processar Cadastro Completo';
             btnSubmit.disabled = false;
