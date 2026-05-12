@@ -13,7 +13,8 @@
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
         input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         
-        .variacao-grid { display: grid; grid-template-columns: 50px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #3498db; }
+        /* Ajustei a grade para ter apenas 2 colunas agora que o preço saiu */
+        .variacao-grid { display: grid; grid-template-columns: 50px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #3498db; }
         .ingrediente-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #fdfbf7; padding: 10px; border: 1px solid #e1d8c1; border-radius: 4px; }
         
         button.btn-add { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
@@ -61,13 +62,12 @@
         <div id="lista-ingredientes-container"></div>
         <button type="button" class="btn-add" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
 
-        <h3>2. Criação dos Produtos e Preços</h3>
-        <p class="info-text">Selecione o rendimento. O sistema cadastrará em "Produtos" e no "Catálogo_Filial".</p>
+        <h3>2. Criação dos Produtos</h3>
+        <p class="info-text">Selecione o rendimento. O preço será calculado automaticamente pelo Grist.</p>
         
         <!-- P -->
         <div class="variacao-grid">
             <div><input type="checkbox" id="chk_P" value="P"> <label for="chk_P">P</label></div>
-            <div><label>Preço Venda (R$)</label><input type="number" id="preco_P" step="0.01"></div>
             <div>
                 <label>Rendimento</label>
                 <select id="fator_P">
@@ -84,7 +84,6 @@
         <!-- M -->
         <div class="variacao-grid">
             <div><input type="checkbox" id="chk_M" value="M"> <label for="chk_M">M</label></div>
-            <div><label>Preço Venda (R$)</label><input type="number" id="preco_M" step="0.01"></div>
             <div>
                 <label>Rendimento</label>
                 <select id="fator_M">
@@ -101,7 +100,6 @@
         <!-- G -->
         <div class="variacao-grid">
             <div><input type="checkbox" id="chk_G" value="G"> <label for="chk_G">G</label></div>
-            <div><label>Preço Venda (R$)</label><input type="number" id="preco_G" step="0.01"></div>
             <div>
                 <label>Rendimento</label>
                 <select id="fator_G">
@@ -212,7 +210,6 @@
         
         const actions = []; 
 
-        // O null foi adicionado aqui
         actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
             'Nome_da_Receita': nomeReceita
         }]);
@@ -235,29 +232,26 @@
                 camposComposicao['Quantidade_Usada'] = qtd; 
             }
 
-            // O null foi adicionado aqui
-            actions.push(['AddRecord', 'RECEITAS', null, camposComposicao]);
+            // ATUALIZADO: Nome real da tabela no Grist
+            actions.push(['AddRecord', 'Composicao_Receita', null, camposComposicao]);
         });
 
         const tamanhos = ['P', 'M', 'G'];
         tamanhos.forEach(tamanho => {
             if (document.getElementById(`chk_${tamanho}`).checked) {
-                const preco = parseFloat(document.getElementById(`preco_${tamanho}`).value) || 0;
                 const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
                 const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
 
-                // O null foi adicionado aqui
                 actions.push(['AddRecord', 'Produtos', null, {
                     'Nome': nomeFinalProduto,
                     'Receita': nomeReceita,
                     'Fator_de_Rendimento': fatorRendimento
                 }]);
 
-                // O null foi adicionado aqui
+                // ATUALIZADO: Preço_Venda foi removido
                 actions.push(['AddRecord', 'Catalogo_Filial', null, {
                     'Filial': filial,
                     'Produto': nomeFinalProduto,
-                    'Preco_Venda': preco,
                     'Categoria': 'Encomendas',
                     'Tamanho': `${tamanho}`
                 }]);
