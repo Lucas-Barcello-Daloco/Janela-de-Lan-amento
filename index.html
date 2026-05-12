@@ -123,8 +123,8 @@
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            // Corrigido para o ID exato da tabela de cadastro
-            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas'); 
+            // Revertido para Cadastro_de_Receitas, pois é o ID real da tabela no seu Grist
+            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
 
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
@@ -148,7 +148,7 @@
 
         } catch (error) {
             console.error("Erro ao carregar dados do Grist:", error);
-            document.getElementById('status-loading').innerText = "Erro ao ler banco de dados. Verifique os nomes das tabelas no código.";
+            document.getElementById('status-loading').innerText = "Erro ao ler banco de dados: " + error.message;
             document.getElementById('status-loading').style.color = "red";
         }
     }
@@ -214,12 +214,12 @@
 
             const actions = []; 
             
-            // PREVENÇÃO DE DUPLICIDADE
-            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas');
+            // PREVENÇÃO DE DUPLICIDADE (Também revertido para Cadastro_de_Receitas)
+            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas');
             const receitasExistentes = receitasData.Nome_da_Receita || [];
 
             if (!receitasExistentes.includes(nomeReceita)) {
-                actions.push(['AddRecord', 'Cadastro_Receitas', null, {
+                actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
                     'Nome_da_Receita': nomeReceita
                 }]);
             }
@@ -242,7 +242,7 @@
                     camposComposicao['Quantidade_Usada'] = qtd; 
                 }
 
-                // CORRIGIDO: O nome correto da tabela de vínculo é RECEITAS
+                // O nome correto da tabela de vínculo de ingredientes se chama RECEITAS nas imagens
                 actions.push(['AddRecord', 'RECEITAS', null, camposComposicao]);
             });
 
