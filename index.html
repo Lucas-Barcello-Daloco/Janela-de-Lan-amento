@@ -61,11 +61,13 @@
         <div id="lista-ingredientes-container"></div>
         <button type="button" class="btn-add" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
 
-        <h3>2. Criação dos Produtos</h3>
+        <h3>2. Criação dos Produtos e Preços</h3>
         <p class="info-text">Selecione o rendimento. O sistema cadastrará em "Produtos" e no "Catálogo_Filial".</p>
         
+        <!-- P -->
         <div class="variacao-grid">
             <div><input type="checkbox" id="chk_P" value="P"> <label for="chk_P">P</label></div>
+            <div><label>Preço Venda (R$)</label><input type="number" id="preco_P" step="0.01"></div>
             <div>
                 <label>Rendimento</label>
                 <select id="fator_P">
@@ -79,8 +81,10 @@
             </div>
         </div>
         
+        <!-- M -->
         <div class="variacao-grid">
             <div><input type="checkbox" id="chk_M" value="M"> <label for="chk_M">M</label></div>
+            <div><label>Preço Venda (R$)</label><input type="number" id="preco_M" step="0.01"></div>
             <div>
                 <label>Rendimento</label>
                 <select id="fator_M">
@@ -94,8 +98,10 @@
             </div>
         </div>
 
+        <!-- G -->
         <div class="variacao-grid">
             <div><input type="checkbox" id="chk_G" value="G"> <label for="chk_G">G</label></div>
+            <div><label>Preço Venda (R$)</label><input type="number" id="preco_G" step="0.01"></div>
             <div>
                 <label>Rendimento</label>
                 <select id="fator_G">
@@ -120,7 +126,7 @@
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); // ATUALIZADO AQUI
+            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
 
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
@@ -206,8 +212,8 @@
         
         const actions = []; 
 
-        // ATUALIZADO AQUI
-        actions.push(['AddRecord', 'Cadastro_de_Receitas', {
+        // O null foi adicionado aqui
+        actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
             'Nome_da_Receita': nomeReceita
         }]);
 
@@ -229,24 +235,29 @@
                 camposComposicao['Quantidade_Usada'] = qtd; 
             }
 
-            actions.push(['AddRecord', 'RECEITAS', camposComposicao]);
+            // O null foi adicionado aqui
+            actions.push(['AddRecord', 'RECEITAS', null, camposComposicao]);
         });
 
         const tamanhos = ['P', 'M', 'G'];
         tamanhos.forEach(tamanho => {
             if (document.getElementById(`chk_${tamanho}`).checked) {
+                const preco = parseFloat(document.getElementById(`preco_${tamanho}`).value) || 0;
                 const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
                 const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
 
-                actions.push(['AddRecord', 'Produtos', {
+                // O null foi adicionado aqui
+                actions.push(['AddRecord', 'Produtos', null, {
                     'Nome': nomeFinalProduto,
                     'Receita': nomeReceita,
                     'Fator_de_Rendimento': fatorRendimento
                 }]);
 
-                actions.push(['AddRecord', 'Catalogo_Filial', {
+                // O null foi adicionado aqui
+                actions.push(['AddRecord', 'Catalogo_Filial', null, {
                     'Filial': filial,
                     'Produto': nomeFinalProduto,
+                    'Preco_Venda': preco,
                     'Categoria': 'Encomendas',
                     'Tamanho': `${tamanho}`
                 }]);
