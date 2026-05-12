@@ -13,7 +13,6 @@
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
         input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         
-        /* Grade em 2 colunas */
         .variacao-grid { display: grid; grid-template-columns: 50px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #3498db; }
         .ingrediente-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #fdfbf7; padding: 10px; border: 1px solid #e1d8c1; border-radius: 4px; }
         
@@ -124,7 +123,8 @@
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
+            // Corrigido para o ID exato da tabela de cadastro
+            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas'); 
 
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
@@ -214,13 +214,12 @@
 
             const actions = []; 
             
-            // PREVENÇÃO DE DUPLICIDADE: Busca as receitas existentes no momento do envio
-            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas');
+            // PREVENÇÃO DE DUPLICIDADE
+            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas');
             const receitasExistentes = receitasData.Nome_da_Receita || [];
 
-            // Apenas adiciona a Receita Base se ela NÃO existir ainda no banco
             if (!receitasExistentes.includes(nomeReceita)) {
-                actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
+                actions.push(['AddRecord', 'Cadastro_Receitas', null, {
                     'Nome_da_Receita': nomeReceita
                 }]);
             }
@@ -243,7 +242,8 @@
                     camposComposicao['Quantidade_Usada'] = qtd; 
                 }
 
-                actions.push(['AddRecord', 'Composicao_Receita', null, camposComposicao]);
+                // CORRIGIDO: O nome correto da tabela de vínculo é RECEITAS
+                actions.push(['AddRecord', 'RECEITAS', null, camposComposicao]);
             });
 
             const tamanhos = ['P', 'M', 'G'];
@@ -255,6 +255,12 @@
                     const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
                     const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
 
+                    // Tradução dos tamanhos exatos conforme visualizados no banco
+                    let tamanhoFormatado = '';
+                    if(tamanho === 'G') tamanhoFormatado = 'G (450g)';
+                    else if(tamanho === 'M') tamanhoFormatado = 'M (350g)';
+                    else if(tamanho === 'P') tamanhoFormatado = 'P (230g)';
+
                     actions.push(['AddRecord', 'Produtos', null, {
                         'Nome': nomeFinalProduto,
                         'Receita': nomeReceita,
@@ -265,7 +271,7 @@
                         'Filial': filial,
                         'Produto': nomeFinalProduto,
                         'Categoria': 'Encomendas',
-                        'Tamanho': `${tamanho}`
+                        'Tamanho': tamanhoFormatado
                     }]);
                 }
             });
@@ -287,12 +293,7 @@
 
         } catch (error) {
             console.error(error);
-            // Mensagem tratada especificamente para o problema do KeyError que você enfrentou
-            if (error.message.includes('KeyError')) {
-                alert(`Erro interno de Fórmula no Grist!\nDetalhe: ${error.message}\nVerifique se alguma fórmula nas suas tabelas do Grist está tentando buscar um nome incorreto.`);
-            } else {
-                alert('Erro ao salvar no Grist: ' + error.message);
-            }
+            alert('Erro ao salvar no Grist: ' + error.message);
         } finally {
             btnSubmit.innerText = 'Processar Cadastro Completo';
             btnSubmit.disabled = false;
