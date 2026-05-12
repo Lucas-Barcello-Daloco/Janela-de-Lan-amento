@@ -123,7 +123,6 @@
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            // ATUALIZADO: Nome exato da tabela
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
 
             const datalistFiliais = document.getElementById('lista-filiais');
@@ -214,7 +213,6 @@
 
             const actions = []; 
             
-            // PREVENÇÃO DE DUPLICIDADE (ATUALIZADO PARA 'Cadastro_de_Receitas')
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas');
             const receitasExistentes = receitasData.Nome_da_Receita || [];
 
@@ -242,8 +240,8 @@
                     camposComposicao['Quantidade_Usada'] = qtd; 
                 }
 
-                // ATUALIZADO: Nome exato da tabela de composição (RECEITAS)
-                actions.push(['AddRecord', 'RECEITAS', null, camposComposicao]);
+                // CORRIGIDO AQUI: 'Receitas' (case-sensitive)
+                actions.push(['AddRecord', 'Receitas', null, camposComposicao]);
             });
 
             const tamanhos = ['P', 'M', 'G'];
@@ -255,7 +253,6 @@
                     const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
                     const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
 
-                    // Tradução dos tamanhos exatos conforme visualizados no banco
                     let tamanhoFormatado = '';
                     if(tamanho === 'G') tamanhoFormatado = 'G (450g)';
                     else if(tamanho === 'M') tamanhoFormatado = 'M (350g)';
@@ -283,7 +280,6 @@
                 return;
             }
 
-            // Dispara todas as ações em lote
             await grist.docApi.applyUserActions(actions);
             
             alert('Cadastro efetuado com sucesso!');
