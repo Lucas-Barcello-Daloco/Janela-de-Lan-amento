@@ -154,7 +154,6 @@
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            // Corrigido: Agora puxa estritamente de 'Cadastro_de_Receitas'
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
 
             // Preenche Filiais e salva o ID
@@ -304,7 +303,6 @@
         const btnSubmit = document.querySelector('.btn-submit');
         
         try {
-            // Validação de segurança: Verifica se a filial selecionada existe no mapa
             const idFilial = mapaIds['Filiais'][filialNome];
             if (!idFilial) {
                 alert('Filial não encontrada. Por favor, selecione uma filial válida da lista.');
@@ -317,7 +315,6 @@
             // 1. Processar Cadastro da Receita Base
             let idReceita = mapaIds['Receitas'][nomeReceita];
             if (!idReceita) {
-                // Corrigido: Cadastro na tabela 'Cadastro_de_Receitas'
                 const resultReceita = await grist.docApi.applyUserActions([
                     ['AddRecord', 'Cadastro_de_Receitas', null, {
                         'Nome_da_Receita': nomeReceita,
@@ -325,8 +322,8 @@
                         'Unidade': unidadeReceita
                     }]
                 ]);
-                idReceita = resultReceita[0]; // Pega o ID numérico da nova linha
-                mapaIds['Receitas'][nomeReceita] = idReceita; // Salva no mapa para uso futuro
+                idReceita = resultReceita[0]; 
+                mapaIds['Receitas'][nomeReceita] = idReceita; 
             }
 
             // 2. Processar Ingredientes (Composição)
@@ -338,7 +335,6 @@
                 const tipo = linha.querySelector('.ing-tipo').value;
                 const qtd = parseFloat(linha.querySelector('.ing-qtd').value);
 
-                // Em colunas de referência enviamos sempre o ID gerado, não o texto
                 let camposComposicao = { 'ID_Nome': idReceita };
 
                 if (tipo === 'Insumo') {
@@ -353,7 +349,8 @@
                     camposComposicao['Quantidade'] = qtd; 
                 }
 
-                acoesIngredientes.push(['AddRecord', 'Composicao_Receita', null, camposComposicao]);
+                // CORREÇÃO: Enviando os ingredientes para a tabela 'Receitas'
+                acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
             };
 
             if (acoesIngredientes.length > 0) {
@@ -380,7 +377,7 @@
 
                     acoesProdutos.push(['AddRecord', 'Produtos', null, {
                         'Nome': nomeFinalProduto,
-                        'Receita': idReceita, // Link de Referência por ID
+                        'Receita': idReceita, 
                         'Fator_de_Rendimento': fatorRendimento
                     }]);
 
@@ -402,8 +399,8 @@
             const acoesCatalogo = [];
             idsProdutosCriados.forEach((idProduto, index) => {
                 acoesCatalogo.push(['AddRecord', 'Catalogo_Filial', null, {
-                    'Filial': idFilial,      // Link de Referência da Filial (ID)
-                    'Produto': idProduto,    // Link de Referência do Produto (ID)
+                    'Filial': idFilial,      
+                    'Produto': idProduto,    
                     'Categoria': 'Encomendas',
                     'Tamanho': configsCatalogo[index].tamanhoFormatado
                 }]);
