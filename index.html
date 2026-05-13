@@ -7,14 +7,15 @@
     <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background: #eef2f5; color: #333; }
-        .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 800px; margin: 0 auto; }
+        .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 850px; margin: 0 auto; }
         h2, h3 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
         input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         
         .variacao-grid { display: grid; grid-template-columns: 50px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #3498db; }
-        .ingrediente-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #fdfbf7; padding: 10px; border: 1px solid #e1d8c1; border-radius: 4px; }
+        
+        .ingrediente-row { display: grid; grid-template-columns: 2fr 1fr 1fr 60px auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #fdfbf7; padding: 10px; border: 1px solid #e1d8c1; border-radius: 4px; }
         
         button.btn-add { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
         button.btn-add:hover { background: #2980b9; }
@@ -23,6 +24,9 @@
         button.btn-submit:hover { background: #219653; }
         button:disabled { background: #95a5a6; cursor: not-allowed; }
         
+        input.ing-unidade, input.readonly-field { background-color: #e9ecef; color: #495057; text-align: center; cursor: not-allowed; font-weight: bold; }
+        select.readonly-field { background-color: #e9ecef; color: #495057; cursor: not-allowed; }
+
         .info-text { font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px; }
         #status-loading { color: #e67e22; font-weight: bold; margin-bottom: 15px; }
     </style>
@@ -44,19 +48,36 @@
             <label>Filial:</label>
             <input type="text" id="filial" list="lista-filiais" required placeholder="Selecione a filial">
         </div>
-        <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+
+        <!-- Modificado: Adicionado Rendimento e Unidade para a Receita Base -->
+        <div class="form-group" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;">
             <div>
                 <label>Nome da Receita Base (Ex: OVO-ALFAJOR):</label>
-                <input type="text" id="nome_receita" list="lista-receitas" required placeholder="Selecione ou crie nova">
+                <input type="text" id="nome_receita" list="lista-receitas" required placeholder="Selecione ou crie nova" oninput="verificarReceitaExistente()">
             </div>
             <div>
-                <label>Nome Final do Produto (Ex: ALFAJOR):</label>
-                <input type="text" id="produto_base" required placeholder="Gerará: OVO G ALFAJOR, etc.">
+                <label>Rend. Total (Ex: 1000):</label>
+                <input type="number" id="rendimento_receita" step="0.01" required placeholder="Qtd">
+            </div>
+            <div>
+                <label>Unidade:</label>
+                <select id="unidade_receita" required>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                    <option value="ml">ml</option>
+                    <option value="L">L</option>
+                    <option value="UN">UN</option>
+                </select>
             </div>
         </div>
 
+        <div class="form-group">
+            <label>Nome Final do Produto (Ex: ALFAJOR):</label>
+            <input type="text" id="produto_base" required placeholder="Gerará: OVO G ALFAJOR, etc.">
+        </div>
+
         <h3>1. Composição da Ficha Técnica</h3>
-        <p class="info-text">Insira os ingredientes da Receita Base.</p>
+        <p class="info-text">Insira os ingredientes da Receita Base e verifique a unidade de medida correta.</p>
         
         <div id="lista-ingredientes-container"></div>
         <button type="button" class="btn-add" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
@@ -119,27 +140,48 @@
 <script>
     grist.ready({ requiredAccess: 'full' });
 
+    // Dicionários para armazenar os dados puxados do banco
+    const mapaUnidades = { 'Insumo': {}, 'Sub_Receita': {} };
+    const dadosReceitasBase = {}; // Guarda rendimento e unidade das receitas que já existem
+
     async function carregarDadosDoBanco() {
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
 
+            // Preenche Filiais
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
                 filiaisData.id.forEach(idFilial => { datalistFiliais.innerHTML += `<option value="${idFilial}">`; });
             }
 
+            // Preenche Insumos e mapeia suas Unidades
             const datalistInsumos = document.getElementById('lista-insumos');
             if(insumosData.Nome) {
-                insumosData.Nome.forEach(nome => { datalistInsumos.innerHTML += `<option value="${nome}">`; });
+                insumosData.Nome.forEach((nome, index) => { 
+                    datalistInsumos.innerHTML += `<option value="${nome}">`; 
+                    if(insumosData.Unidade) {
+                        mapaUnidades['Insumo'][nome] = insumosData.Unidade[index];
+                    }
+                });
             }
 
+            // Preenche Receitas, mapeia Unidades e guarda o Rendimento
             const datalistReceitas = document.getElementById('lista-receitas');
             if(receitasData.Nome_da_Receita) {
-                receitasData.Nome_da_Receita.forEach(nome => { datalistReceitas.innerHTML += `<option value="${nome}">`; });
-            } else if (receitasData.id) {
-                 receitasData.id.forEach(nome => { datalistReceitas.innerHTML += `<option value="${nome}">`; });
+                receitasData.Nome_da_Receita.forEach((nome, index) => { 
+                    datalistReceitas.innerHTML += `<option value="${nome}">`; 
+                    
+                    let und = receitasData.Unidade ? receitasData.Unidade[index] : '';
+                    // ATENÇÃO: Confirme se o ID da coluna no Grist é "Rendimento_Total"
+                    let rend = receitasData.Rendimento_Total ? receitasData.Rendimento_Total[index] : ''; 
+
+                    if(und) mapaUnidades['Sub_Receita'][nome] = und;
+                    
+                    // Guarda para o Autofill
+                    dadosReceitasBase[nome] = { unidade: und, rendimento: rend };
+                });
             }
 
             document.getElementById('status-loading').style.display = 'none';
@@ -154,6 +196,34 @@
 
     carregarDadosDoBanco();
 
+    // Função que verifica se a receita digitada já existe e preenche os campos
+    function verificarReceitaExistente() {
+        const nomeReceita = document.getElementById('nome_receita').value;
+        const inputRend = document.getElementById('rendimento_receita');
+        const selectUnd = document.getElementById('unidade_receita');
+
+        if (dadosReceitasBase[nomeReceita]) {
+            // Se já existe, preenche e bloqueia os campos
+            inputRend.value = dadosReceitasBase[nomeReceita].rendimento;
+            selectUnd.value = dadosReceitasBase[nomeReceita].unidade;
+            
+            inputRend.readOnly = true;
+            inputRend.classList.add('readonly-field');
+            selectUnd.disabled = true;
+            selectUnd.classList.add('readonly-field');
+        } else {
+            // Se for nova, destrava os campos para o usuário digitar
+            if (inputRend.readOnly) {
+                inputRend.value = '';
+                inputRend.readOnly = false;
+                inputRend.classList.remove('readonly-field');
+                
+                selectUnd.disabled = false;
+                selectUnd.classList.remove('readonly-field');
+            }
+        }
+    }
+
     function adicionarLinhaIngrediente() {
         const container = document.getElementById('lista-ingredientes-container');
         const idLinha = Date.now();
@@ -165,7 +235,7 @@
         div.innerHTML = `
             <div>
                 <label>Insumo ou Sub-receita</label>
-                <input type="text" class="ing-nome" list="lista-insumos" required placeholder="Digite para buscar...">
+                <input type="text" class="ing-nome" list="lista-insumos" required placeholder="Digite para buscar..." oninput="atualizarUnidade(${idLinha})">
             </div>
             <div>
                 <label>Tipo</label>
@@ -177,6 +247,10 @@
             <div>
                 <label>Quantidade</label>
                 <input type="number" class="ing-qtd" step="0.01" required placeholder="Ex: 140">
+            </div>
+            <div>
+                <label>Unid.</label>
+                <input type="text" class="ing-unidade" tabindex="-1" readonly placeholder="-">
             </div>
             <div>
                 <button type="button" class="btn-remove" onclick="removerLinha(${idLinha})">X</button>
@@ -193,6 +267,19 @@
             inputNome.setAttribute('list', 'lista-receitas');
         }
         inputNome.value = ""; 
+        atualizarUnidade(idLinha);
+    }
+
+    function atualizarUnidade(idLinha) {
+        const linha = document.getElementById(`ingrediente-${idLinha}`);
+        if(!linha) return;
+
+        const nomeSelecionado = linha.querySelector('.ing-nome').value;
+        const tipoSelecionado = linha.querySelector('.ing-tipo').value;
+        const inputUnidade = linha.querySelector('.ing-unidade');
+
+        const unidade = mapaUnidades[tipoSelecionado][nomeSelecionado] || '-';
+        inputUnidade.value = unidade;
     }
 
     function removerLinha(id) {
@@ -204,6 +291,8 @@
 
         const filial = document.getElementById('filial').value;
         const nomeReceita = document.getElementById('nome_receita').value;
+        const rendimentoReceita = parseFloat(document.getElementById('rendimento_receita').value);
+        const unidadeReceita = document.getElementById('unidade_receita').value;
         const produtoBase = document.getElementById('produto_base').value;
         const btnSubmit = document.querySelector('.btn-submit');
         
@@ -216,9 +305,12 @@
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas');
             const receitasExistentes = receitasData.Nome_da_Receita || [];
 
+            // Se for uma receita NOVA, salva com o Nome, Rendimento e Unidade
             if (!receitasExistentes.includes(nomeReceita)) {
                 actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
-                    'Nome_da_Receita': nomeReceita
+                    'Nome_da_Receita': nomeReceita,
+                    'Rendimento_Total': rendimentoReceita, // Verifique se este é o ID exato da coluna no Grist
+                    'Unidade': unidadeReceita
                 }]);
             }
 
@@ -240,7 +332,6 @@
                     camposComposicao['Quantidade_Usada'] = qtd; 
                 }
 
-                // CORRIGIDO AQUI: 'Receitas' (case-sensitive)
                 actions.push(['AddRecord', 'Receitas', null, camposComposicao]);
             });
 
@@ -284,6 +375,13 @@
             
             alert('Cadastro efetuado com sucesso!');
             document.getElementById('form-produtos').reset();
+            
+            // Força a liberação dos campos de receita após o reset
+            document.getElementById('rendimento_receita').readOnly = false;
+            document.getElementById('rendimento_receita').classList.remove('readonly-field');
+            document.getElementById('unidade_receita').disabled = false;
+            document.getElementById('unidade_receita').classList.remove('readonly-field');
+
             document.getElementById('lista-ingredientes-container').innerHTML = '';
             adicionarLinhaIngrediente(); 
 
