@@ -45,6 +45,7 @@
         <datalist id="lista-filiais"></datalist>
         <datalist id="lista-insumos"></datalist>
         <datalist id="lista-receitas"></datalist>
+        <datalist id="lista-categorias"></datalist> <!-- Nova lista de categorias -->
 
         <div class="form-group">
             <label>Filial:</label>
@@ -73,13 +74,18 @@
         </div>
 
         <div class="form-group">
-            <label>Nome Final do Produto Base (Ex: BOLO ALFAJOR):</label>
+            <label>Nome Final do Produto Base (Ficha Técnica Ex: BOLO ALFAJOR):</label>
             <input type="text" id="produto_base" required placeholder="O tamanho será adicionado no final deste nome.">
         </div>
 
         <h3>1. Configurações de Venda e Catálogo</h3>
-        <p class="info-text">Defina como este produto será vendido na filial.</p>
+        <p class="info-text">Defina como este produto será apresentado e vendido.</p>
         
+        <div class="form-group">
+            <label>Nome do Produto (Exibição no Catálogo):</label>
+            <input type="text" id="nome_produto_catalogo" required placeholder="Ex: Bolo Alfajor Artesanal">
+        </div>
+
         <div class="form-group grid-2">
             <div>
                 <label>Tipo de Venda:</label>
@@ -90,7 +96,7 @@
             </div>
             <div>
                 <label>Categoria:</label>
-                <input type="text" id="categoria" required placeholder="Ex: Encomendas, Kit's, Bolos do Pote...">
+                <input type="text" id="categoria" list="lista-categorias" required placeholder="Selecione ou digite a categoria">
             </div>
         </div>
 
@@ -156,6 +162,7 @@
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
+            const catalogoData = await grist.docApi.fetchTable('Catalogo_Filial'); // Busca categorias existentes
 
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
@@ -188,6 +195,15 @@
 
                     if(und) mapaUnidades['Sub_Receita'][nome] = und;
                     dadosReceitasBase[nome] = { unidade: und, rendimento: rend };
+                });
+            }
+
+            // Extrai as categorias únicas e joga no datalist
+            const datalistCategorias = document.getElementById('lista-categorias');
+            if(catalogoData.Categoria) {
+                const categoriasUnicas = [...new Set(catalogoData.Categoria.filter(Boolean))];
+                categoriasUnicas.forEach(cat => {
+                    datalistCategorias.innerHTML += `<option value="${cat}">`;
                 });
             }
 
@@ -351,11 +367,12 @@
         const produtoBase = document.getElementById('produto_base').value;
         
         // Dados Catálogo
+        const nomeProdutoCatalogo = document.getElementById('nome_produto_catalogo').value;
         const tipoVenda = document.getElementById('tipo_venda').value;
         const categoria = document.getElementById('categoria').value;
         const diasAntecedencia = tipoVenda === 'Encomenda' ? parseInt(document.getElementById('dias_antecedencia').value) || 0 : 0;
         let dataLimite = document.getElementById('data_limite').value;
-        if (!dataLimite) dataLimite = null; // Envia null se estiver vazio para não quebrar a data no Grist
+        if (!dataLimite) dataLimite = null; 
 
         const btnSubmit = document.querySelector('.btn-submit');
         const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
@@ -455,11 +472,12 @@
                     else throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
                 }
 
-                // Salva no Catálogo com os novos campos
+                // Salva no Catálogo com os novos campos, incluindo Nome_Produto
                 await grist.docApi.applyUserActions([
                     ['AddRecord', 'Catalogo_Filial', null, {
                         'Filial': idFilial,      
-                        'Produto': idProduto,    
+                        'Produto': idProduto,
+                        'Nome_Produto': nomeProdutoCatalogo,    
                         'Categoria': categoria,
                         'Tipo_Venda': tipoVenda,
                         'Dias_Antecedencia': diasAntecedencia,
@@ -477,12 +495,12 @@
             document.getElementById('rendimento_receita').classList.remove('readonly-field');
             document.getElementById('unidade_receita').disabled = false;
             document.getElementById('unidade_receita').classList.remove('readonly-field');
-            toggleAntecedencia(); // reseta exibição do campo de dias
+            toggleAntecedencia(); 
 
             document.getElementById('lista-ingredientes-container').innerHTML = '';
             document.getElementById('lista-variacoes-container').innerHTML = '';
             adicionarLinhaIngrediente(); 
-            adicionarVariacao(); // Adiciona ao menos um tamanho inicial vazio
+            adicionarVariacao(); 
 
         } catch (error) {
             console.error(error);
@@ -493,10 +511,9 @@
         }
     });
 
-    // Inicia a interface com 1 linha de ingrediente e 1 variação vazias
     adicionarLinhaIngrediente();
     adicionarVariacao();
-    toggleAntecedencia(); // Ajusta os dias de antecedência no carregamento
+    toggleAntecedencia(); 
 </script>
 
 </body>
