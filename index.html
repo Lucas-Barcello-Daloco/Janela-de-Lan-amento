@@ -139,11 +139,8 @@
 <script>
     grist.ready({ requiredAccess: 'full' });
 
-    // Dicionários para unidades e Autofill
     const mapaUnidades = { 'Insumo': {}, 'Sub_Receita': {} };
     const dadosReceitasBase = {};
-    
-    // NOVO: Dicionário Mestre de IDs para Referências
     const mapaIds = {
         'Filiais': {},
         'Insumos': {},
@@ -156,7 +153,6 @@
             const insumosData = await grist.docApi.fetchTable('Insumos');
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
 
-            // Preenche Filiais e salva o ID
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
                 const colNomesFiliais = filiaisData.Nome || filiaisData.Filial || filiaisData.id;
@@ -166,7 +162,6 @@
                 });
             }
 
-            // Preenche Insumos, Unidades e mapeia IDs
             const datalistInsumos = document.getElementById('lista-insumos');
             if(insumosData.Nome) {
                 insumosData.Nome.forEach((nome, index) => { 
@@ -178,7 +173,6 @@
                 });
             }
 
-            // Preenche Receitas, Unidades e mapeia IDs
             const datalistReceitas = document.getElementById('lista-receitas');
             if(receitasData.Nome_da_Receita) {
                 receitasData.Nome_da_Receita.forEach((nome, index) => { 
@@ -322,7 +316,16 @@
                         'Unidade': unidadeReceita
                     }]
                 ]);
-                idReceita = resultReceita[0]; 
+                
+                // Tratamento seguro do retorno (Array ou Objeto)
+                if (Array.isArray(resultReceita)) {
+                    idReceita = resultReceita[0];
+                } else if (resultReceita !== null && typeof resultReceita === 'object') {
+                    idReceita = Object.values(resultReceita)[0];
+                } else {
+                    idReceita = resultReceita;
+                }
+                
                 mapaIds['Receitas'][nomeReceita] = idReceita; 
             }
 
@@ -349,7 +352,6 @@
                     camposComposicao['Quantidade'] = qtd; 
                 }
 
-                // CORREÇÃO: Enviando os ingredientes para a tabela 'Receitas'
                 acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
             };
 
@@ -367,7 +369,6 @@
                 if (document.getElementById(`chk_${tamanho}`).checked) {
                     adicionouTamanho = true;
                     const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
-                    
                     const nomeFinalProduto = `${produtoBase} ${tamanho}`;
 
                     let tamanhoFormatado = '';
@@ -392,17 +393,29 @@
                 return;
             }
 
-            // Cria Produtos e pega os IDs criados de volta
+            // 4. Cria Produtos e pega os IDs criados de forma segura
             const idsProdutosCriados = await grist.docApi.applyUserActions(acoesProdutos);
             
-            // 4. Cria vínculos no Catálogo Filial com os IDs corretos
+            // BLINDAGEM: Garante que os IDs retornados são um Array válido
+            let arrayIdsProdutos = [];
+            if (Array.isArray(idsProdutosCriados)) {
+                arrayIdsProdutos = idsProdutosCriados;
+            } else if (idsProdutosCriados !== null && typeof idsProdutosCriados === 'object') {
+                arrayIdsProdutos = Object.values(idsProdutosCriados);
+            } else {
+                arrayIdsProdutos = [idsProdutosCriados];
+            }
+
+            // 5. Cria vínculos no Catálogo Filial iterando nas nossas configs locais
             const acoesCatalogo = [];
-            idsProdutosCriados.forEach((idProduto, index) => {
+            configsCatalogo.forEach((config, index) => {
+                const idProd = arrayIdsProdutos[index];
+                
                 acoesCatalogo.push(['AddRecord', 'Catalogo_Filial', null, {
                     'Filial': idFilial,      
-                    'Produto': idProduto,    
+                    'Produto': idProd,    
                     'Categoria': 'Encomendas',
-                    'Tamanho': configsCatalogo[index].tamanhoFormatado
+                    'Tamanho': config.tamanhoFormatado
                 }]);
             });
 
