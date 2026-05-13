@@ -45,7 +45,6 @@
         <datalist id="lista-filiais"></datalist>
         <datalist id="lista-insumos"></datalist>
         <datalist id="lista-receitas"></datalist>
-        <datalist id="lista-categorias"></datalist> <!-- Nova lista de categorias -->
 
         <div class="form-group">
             <label>Filial:</label>
@@ -96,7 +95,9 @@
             </div>
             <div>
                 <label>Categoria:</label>
-                <input type="text" id="categoria" list="lista-categorias" required placeholder="Selecione ou digite a categoria">
+                <select id="categoria" required>
+                    <option value="" disabled selected>Carregando categorias...</option>
+                </select>
             </div>
         </div>
 
@@ -162,8 +163,8 @@
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
-            const catalogoData = await grist.docApi.fetchTable('Catalogo_Filial'); // Busca categorias existentes
 
+            // Populando Filiais
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
                 const colNomesFiliais = filiaisData.Nome || filiaisData.Filial || filiaisData.id;
@@ -173,6 +174,7 @@
                 });
             }
 
+            // Populando Insumos
             const datalistInsumos = document.getElementById('lista-insumos');
             if(insumosData.Nome) {
                 insumosData.Nome.forEach((nome, index) => { 
@@ -184,6 +186,7 @@
                 });
             }
 
+            // Populando Receitas Base
             const datalistReceitas = document.getElementById('lista-receitas');
             if(receitasData.Nome_da_Receita) {
                 receitasData.Nome_da_Receita.forEach((nome, index) => { 
@@ -198,14 +201,48 @@
                 });
             }
 
-            // Extrai as categorias únicas e joga no datalist
-            const datalistCategorias = document.getElementById('lista-categorias');
-            if(catalogoData.Categoria) {
-                const categoriasUnicas = [...new Set(catalogoData.Categoria.filter(Boolean))];
-                categoriasUnicas.forEach(cat => {
-                    datalistCategorias.innerHTML += `<option value="${cat}">`;
-                });
+            // =====================================================================
+            // LEITURA DINÂMICA DAS CONFIGURAÇÕES DA COLUNA "CATEGORIA" NO GRIST
+            // =====================================================================
+            let categoriasEncontradas = [];
+            try {
+                const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
+                const columnsInfo = await grist.docApi.fetchTable('_grist_Tables_column');
+                
+                const indexTabela = tablesInfo.tableId.indexOf('Catalogo_Filial');
+                
+                if (indexTabela !== -1) {
+                    const idTabela = tablesInfo.id[indexTabela];
+                    for (let i = 0; i < columnsInfo.colId.length; i++) {
+                        // Verifica se é a coluna Categoria dentro da tabela Catalogo_Filial
+                        if (columnsInfo.colId[i] === 'Categoria' && columnsInfo.parentId[i] === idTabela) {
+                            const opcoesStr = columnsInfo.widgetOptions[i];
+                            if (opcoesStr) {
+                                const parsed = JSON.parse(opcoesStr);
+                                if (parsed.choices) categoriasEncontradas = parsed.choices;
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("Aviso: Não foi possível ler as opções nativas. Tentando fallback...", e);
             }
+
+            // Fallback: Se não encontrou opções nas configurações ocultas, faz a varredura das linhas existentes
+            if (categoriasEncontradas.length === 0) {
+                const catalogoData = await grist.docApi.fetchTable('Catalogo_Filial');
+                if (catalogoData.Categoria) {
+                    categoriasEncontradas = [...new Set(catalogoData.Categoria.filter(Boolean))];
+                }
+            }
+
+            // Popula o select com as categorias encontradas
+            const selectCategoria = document.getElementById('categoria');
+            selectCategoria.innerHTML = '<option value="" disabled selected>Selecione a categoria...</option>';
+            categoriasEncontradas.forEach(cat => {
+                selectCategoria.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
 
             document.getElementById('status-loading').style.display = 'none';
             document.getElementById('form-produtos').style.display = 'block';
@@ -408,7 +445,6 @@
                 
                 idReceita = extrairId(resultReceita);
 
-                // Fallback de segurança para o ID
                 if (!idReceita || typeof idReceita !== 'number') {
                     const dadosAtuais = await grist.docApi.fetchTable('Cadastro_de_Receitas');
                     const idx = dadosAtuais.Nome_da_Receita.lastIndexOf(nomeReceita);
@@ -464,7 +500,6 @@
                 
                 let idProduto = extrairId(resultProd);
 
-                // Fallback de segurança para o Produto
                 if (!idProduto || typeof idProduto !== 'number') {
                     const prodData = await grist.docApi.fetchTable('Produtos');
                     const idxProd = prodData.Nome.lastIndexOf(nomeFinalProduto);
@@ -472,7 +507,7 @@
                     else throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
                 }
 
-                // Salva no Catálogo com os novos campos, incluindo Nome_Produto
+                // Salva no Catálogo 
                 await grist.docApi.applyUserActions([
                     ['AddRecord', 'Catalogo_Filial', null, {
                         'Filial': idFilial,      
