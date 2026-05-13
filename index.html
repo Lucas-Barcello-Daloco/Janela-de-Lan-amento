@@ -8,18 +8,20 @@
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; background: #eef2f5; color: #333; }
         .container { background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 850px; margin: 0 auto; }
-        h2, h3 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; margin-bottom: 15px; }
+        h2, h3 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; margin-bottom: 15px; margin-top: 25px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
-        input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type="text"], input[type="number"], input[type="date"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         
-        .variacao-grid { display: grid; grid-template-columns: 50px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; border-left: 4px solid #3498db; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .grid-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 15px; }
         
         .ingrediente-row { display: grid; grid-template-columns: 2fr 1fr 1fr 60px auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #fdfbf7; padding: 10px; border: 1px solid #e1d8c1; border-radius: 4px; }
+        .variacao-row { display: grid; grid-template-columns: 1fr 2fr 2fr auto; gap: 10px; margin-bottom: 10px; align-items: end; background: #f8f9fa; padding: 10px; border-left: 4px solid #3498db; border-radius: 4px; }
         
         button.btn-add { background: #3498db; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
         button.btn-add:hover { background: #2980b9; }
-        button.btn-remove { background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+        button.btn-remove { background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; height: 35px;}
         button.btn-submit { background: #27ae60; color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 20px; }
         button.btn-submit:hover { background: #219653; }
         button:disabled { background: #95a5a6; cursor: not-allowed; }
@@ -49,7 +51,7 @@
             <input type="text" id="filial" list="lista-filiais" required placeholder="Selecione a filial">
         </div>
 
-        <div class="form-group" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;">
+        <div class="form-group grid-3">
             <div>
                 <label>Nome da Receita Base:</label>
                 <input type="text" id="nome_receita" list="lista-receitas" required placeholder="Selecione ou crie nova" oninput="verificarReceitaExistente()">
@@ -71,66 +73,49 @@
         </div>
 
         <div class="form-group">
-            <label>Nome Final do Produto (Ex: BOLO ALFAJOR):</label>
-            <input type="text" id="produto_base" required placeholder="Gerará: BOLO ALFAJOR P, etc.">
+            <label>Nome Final do Produto Base (Ex: BOLO ALFAJOR):</label>
+            <input type="text" id="produto_base" required placeholder="O tamanho será adicionado no final deste nome.">
         </div>
 
-        <h3>1. Composição da Ficha Técnica</h3>
+        <h3>1. Configurações de Venda e Catálogo</h3>
+        <p class="info-text">Defina como este produto será vendido na filial.</p>
+        
+        <div class="form-group grid-2">
+            <div>
+                <label>Tipo de Venda:</label>
+                <select id="tipo_venda" required onchange="toggleAntecedencia()">
+                    <option value="Encomenda">Encomenda</option>
+                    <option value="Pronta Entrega">Pronta Entrega</option>
+                </select>
+            </div>
+            <div>
+                <label>Categoria:</label>
+                <input type="text" id="categoria" required placeholder="Ex: Encomendas, Kit's, Bolos do Pote...">
+            </div>
+        </div>
+
+        <div class="form-group grid-2">
+            <div id="div_antecedencia">
+                <label>Dias de Antecedência (Obrigatório p/ Encomenda):</label>
+                <input type="number" id="dias_antecedencia" min="0" value="0">
+            </div>
+            <div>
+                <label>Data Limite para Pedido (Opcional):</label>
+                <input type="date" id="data_limite">
+            </div>
+        </div>
+
+        <h3>2. Composição da Ficha Técnica</h3>
         <p class="info-text">Insira os ingredientes da Receita Base e verifique a unidade de medida correta.</p>
         
         <div id="lista-ingredientes-container"></div>
         <button type="button" class="btn-add" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
 
-        <h3>2. Criação dos Produtos</h3>
-        <p class="info-text">Selecione o rendimento. O preço é calculado automaticamente pelo Grist.</p>
+        <h3>3. Criação dos Tamanhos / Variações</h3>
+        <p class="info-text">Adicione os tamanhos disponíveis (ex: P, M, 20cm, Inteiro). Defina o texto pro catálogo e o fator de rendimento.</p>
         
-        <!-- P -->
-        <div class="variacao-grid">
-            <div><input type="checkbox" id="chk_P" value="P"> <label for="chk_P">P</label></div>
-            <div>
-                <label>Rendimento</label>
-                <select id="fator_P">
-                    <option value="1">Rende 1 un. (Fator 1.0)</option>
-                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
-                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
-                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
-                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
-                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
-                </select>
-            </div>
-        </div>
-        
-        <!-- M -->
-        <div class="variacao-grid">
-            <div><input type="checkbox" id="chk_M" value="M"> <label for="chk_M">M</label></div>
-            <div>
-                <label>Rendimento</label>
-                <select id="fator_M">
-                    <option value="1">Rende 1 un. (Fator 1.0)</option>
-                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
-                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
-                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
-                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
-                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
-                </select>
-            </div>
-        </div>
-
-        <!-- G -->
-        <div class="variacao-grid">
-            <div><input type="checkbox" id="chk_G" value="G"> <label for="chk_G">G</label></div>
-            <div>
-                <label>Rendimento</label>
-                <select id="fator_G">
-                    <option value="1">Rende 1 un. (Fator 1.0)</option>
-                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
-                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
-                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
-                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
-                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
-                </select>
-            </div>
-        </div>
+        <div id="lista-variacoes-container"></div>
+        <button type="button" class="btn-add" onclick="adicionarVariacao()">+ Adicionar Tamanho</button>
 
         <button type="submit" class="btn-submit">Processar Cadastro Completo</button>
     </form>
@@ -147,8 +132,6 @@
         'Receitas': {}
     };
 
-    // FUNÇÃO REVISADA: Extrai o ID da resposta e falha silenciosamente caso seja inválido
-    // para que o Fallback Gigante (busca no banco) assuma o controle.
     function extrairId(resposta) {
         try {
             if (!resposta) return null;
@@ -245,6 +228,21 @@
         }
     }
 
+    function toggleAntecedencia() {
+        const tipoVenda = document.getElementById('tipo_venda').value;
+        const divAnt = document.getElementById('div_antecedencia');
+        const inputAnt = document.getElementById('dias_antecedencia');
+
+        if (tipoVenda === 'Encomenda') {
+            divAnt.style.display = 'block';
+            inputAnt.required = true;
+        } else {
+            divAnt.style.display = 'none';
+            inputAnt.required = false;
+            inputAnt.value = 0;
+        }
+    }
+
     function adicionarLinhaIngrediente() {
         const container = document.getElementById('lista-ingredientes-container');
         const idLinha = Date.now();
@@ -274,7 +272,42 @@
                 <input type="text" class="ing-unidade" tabindex="-1" readonly placeholder="-">
             </div>
             <div>
-                <button type="button" class="btn-remove" onclick="removerLinha(${idLinha})">X</button>
+                <button type="button" class="btn-remove" onclick="removerLinha('ingrediente-${idLinha}')">X</button>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+
+    function adicionarVariacao() {
+        const container = document.getElementById('lista-variacoes-container');
+        const idVar = Date.now();
+        
+        const div = document.createElement('div');
+        div.className = 'variacao-row';
+        div.id = `variacao-${idVar}`;
+        
+        div.innerHTML = `
+            <div>
+                <label>Sigla (vai pro Nome)</label>
+                <input type="text" class="var-sigla" placeholder="Ex: P" required>
+            </div>
+            <div>
+                <label>Texto no Catálogo</label>
+                <input type="text" class="var-desc" placeholder="Ex: P (230g) ou M(20cm)" required>
+            </div>
+            <div>
+                <label>Rendimento</label>
+                <select class="var-fator">
+                    <option value="1">Rende 1 un. (Fator 1.0)</option>
+                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
+                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
+                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
+                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
+                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
+                </select>
+            </div>
+            <div>
+                <button type="button" class="btn-remove" onclick="removerLinha('variacao-${idVar}')">X</button>
             </div>
         `;
         container.appendChild(div);
@@ -303,19 +336,37 @@
         inputUnidade.value = unidade;
     }
 
-    function removerLinha(id) {
-        document.getElementById(`ingrediente-${id}`).remove();
+    function removerLinha(idElemento) {
+        document.getElementById(idElemento).remove();
     }
 
     document.getElementById('form-produtos').addEventListener('submit', async function(e) {
         e.preventDefault();
 
+        // Dados base
         const filialNome = document.getElementById('filial').value;
         const nomeReceita = document.getElementById('nome_receita').value;
         const rendimentoReceita = parseFloat(document.getElementById('rendimento_receita').value);
         const unidadeReceita = document.getElementById('unidade_receita').value;
         const produtoBase = document.getElementById('produto_base').value;
+        
+        // Dados Catálogo
+        const tipoVenda = document.getElementById('tipo_venda').value;
+        const categoria = document.getElementById('categoria').value;
+        const diasAntecedencia = tipoVenda === 'Encomenda' ? parseInt(document.getElementById('dias_antecedencia').value) || 0 : 0;
+        let dataLimite = document.getElementById('data_limite').value;
+        if (!dataLimite) dataLimite = null; // Envia null se estiver vazio para não quebrar a data no Grist
+
         const btnSubmit = document.querySelector('.btn-submit');
+        const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
+        const linhasVariacoes = document.querySelectorAll('.variacao-row');
+
+        if (linhasIngredientes.length === 0) {
+            alert('Adicione pelo menos um ingrediente!'); return;
+        }
+        if (linhasVariacoes.length === 0) {
+            alert('Adicione pelo menos um tamanho/variação!'); return;
+        }
         
         try {
             const idFilial = mapaIds['Filiais'][filialNome];
@@ -340,26 +391,18 @@
                 
                 idReceita = extrairId(resultReceita);
 
-                // 🔥 FALLBACK GIGANTE: Se a API não devolver o ID claramente, 
-                // buscamos na tabela a receita que acabamos de criar.
+                // Fallback de segurança para o ID
                 if (!idReceita || typeof idReceita !== 'number') {
-                    console.log("Acionando Fallback para localizar ID da Receita...");
                     const dadosAtuais = await grist.docApi.fetchTable('Cadastro_de_Receitas');
                     const idx = dadosAtuais.Nome_da_Receita.lastIndexOf(nomeReceita);
-                    if (idx !== -1) {
-                        idReceita = dadosAtuais.id[idx];
-                    } else {
-                        throw new Error("Erro de comunicação: Não foi possível obter o ID da nova Receita.");
-                    }
+                    if (idx !== -1) idReceita = dadosAtuais.id[idx];
+                    else throw new Error("Erro de comunicação: Não foi possível obter o ID da nova Receita.");
                 }
-
                 mapaIds['Receitas'][nomeReceita] = idReceita; 
             }
 
             // 2. Processar Ingredientes (Composição)
             const acoesIngredientes = [];
-            const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
-            
             for(let linha of linhasIngredientes) {
                 const nomeIng = linha.querySelector('.ing-nome').value;
                 const tipo = linha.querySelector('.ing-tipo').value;
@@ -378,7 +421,6 @@
                     camposComposicao['Sub_Receita'] = idSubReceita;
                     camposComposicao['Quantidade_Usada'] = qtd; 
                 }
-
                 acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
             };
 
@@ -386,72 +428,61 @@
                 await grist.docApi.applyUserActions(acoesIngredientes);
             }
 
-            // 3 e 4. Processar Produtos e Catálogo 
-            const tamanhos = ['P', 'M', 'G'];
-            let adicionouTamanho = false;
-            
-            for (let tamanho of tamanhos) {
-                if (document.getElementById(`chk_${tamanho}`).checked) {
-                    adicionouTamanho = true;
-                    const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
-                    const nomeFinalProduto = `${produtoBase} ${tamanho}`;
+            // 3 e 4. Processar Produtos (Tamanhos) e Catálogo dinâmicos
+            for (let row of linhasVariacoes) {
+                const siglaTamanho = row.querySelector('.var-sigla').value.trim();
+                const descTamanho = row.querySelector('.var-desc').value.trim();
+                const fatorRendimento = parseFloat(row.querySelector('.var-fator').value);
+                
+                const nomeFinalProduto = `${produtoBase} ${siglaTamanho}`.trim();
 
-                    let tamanhoFormatado = '';
-                    if(tamanho === 'G') tamanhoFormatado = 'G (450g)';
-                    else if(tamanho === 'M') tamanhoFormatado = 'M (350g)';
-                    else if(tamanho === 'P') tamanhoFormatado = 'P (230g)';
+                // Salva o Produto
+                const resultProd = await grist.docApi.applyUserActions([
+                    ['AddRecord', 'Produtos', null, {
+                        'Nome': nomeFinalProduto,
+                        'Receita': idReceita, 
+                        'Fator_de_Rendimento': fatorRendimento
+                    }]
+                ]);
+                
+                let idProduto = extrairId(resultProd);
 
-                    // Salva o Produto
-                    const resultProd = await grist.docApi.applyUserActions([
-                        ['AddRecord', 'Produtos', null, {
-                            'Nome': nomeFinalProduto,
-                            'Receita': idReceita, 
-                            'Fator_de_Rendimento': fatorRendimento
-                        }]
-                    ]);
-                    
-                    let idProduto = extrairId(resultProd);
-
-                    // 🔥 FALLBACK GIGANTE para o Produto também
-                    if (!idProduto || typeof idProduto !== 'number') {
-                        const prodData = await grist.docApi.fetchTable('Produtos');
-                        const idxProd = prodData.Nome.lastIndexOf(nomeFinalProduto);
-                        if (idxProd !== -1) {
-                            idProduto = prodData.id[idxProd];
-                        } else {
-                            throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
-                        }
-                    }
-
-                    // Salva no Catálogo
-                    await grist.docApi.applyUserActions([
-                        ['AddRecord', 'Catalogo_Filial', null, {
-                            'Filial': idFilial,      
-                            'Produto': idProduto,    
-                            'Categoria': 'Encomendas',
-                            'Tamanho': tamanhoFormatado
-                        }]
-                    ]);
+                // Fallback de segurança para o Produto
+                if (!idProduto || typeof idProduto !== 'number') {
+                    const prodData = await grist.docApi.fetchTable('Produtos');
+                    const idxProd = prodData.Nome.lastIndexOf(nomeFinalProduto);
+                    if (idxProd !== -1) idProduto = prodData.id[idxProd];
+                    else throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
                 }
-            }
 
-            if (!adicionouTamanho || linhasIngredientes.length === 0) { 
-                alert('Adicione pelo menos um tamanho e um ingrediente!');
-                btnSubmit.innerText = 'Processar Cadastro Completo';
-                btnSubmit.disabled = false;
-                return;
+                // Salva no Catálogo com os novos campos
+                await grist.docApi.applyUserActions([
+                    ['AddRecord', 'Catalogo_Filial', null, {
+                        'Filial': idFilial,      
+                        'Produto': idProduto,    
+                        'Categoria': categoria,
+                        'Tipo_Venda': tipoVenda,
+                        'Dias_Antecedencia': diasAntecedencia,
+                        'Data_Limite_Pedido': dataLimite,
+                        'Tamanho': descTamanho
+                    }]
+                ]);
             }
 
             alert('Cadastro efetuado com sucesso!');
             document.getElementById('form-produtos').reset();
             
+            // Restaura estado inicial
             document.getElementById('rendimento_receita').readOnly = false;
             document.getElementById('rendimento_receita').classList.remove('readonly-field');
             document.getElementById('unidade_receita').disabled = false;
             document.getElementById('unidade_receita').classList.remove('readonly-field');
+            toggleAntecedencia(); // reseta exibição do campo de dias
 
             document.getElementById('lista-ingredientes-container').innerHTML = '';
+            document.getElementById('lista-variacoes-container').innerHTML = '';
             adicionarLinhaIngrediente(); 
+            adicionarVariacao(); // Adiciona ao menos um tamanho inicial vazio
 
         } catch (error) {
             console.error(error);
@@ -462,7 +493,10 @@
         }
     });
 
+    // Inicia a interface com 1 linha de ingrediente e 1 variação vazias
     adicionarLinhaIngrediente();
+    adicionarVariacao();
+    toggleAntecedencia(); // Ajusta os dias de antecedência no carregamento
 </script>
 
 </body>
