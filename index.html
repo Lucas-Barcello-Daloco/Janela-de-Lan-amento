@@ -317,7 +317,6 @@
                     }]
                 ]);
                 
-                // Tratamento seguro do retorno (Array ou Objeto)
                 if (Array.isArray(resultReceita)) {
                     idReceita = resultReceita[0];
                 } else if (resultReceita !== null && typeof resultReceita === 'object') {
@@ -344,12 +343,12 @@
                     const idInsumo = mapaIds['Insumos'][nomeIng];
                     if(!idInsumo) throw new Error(`Insumo '${nomeIng}' não existe no sistema. Crie-o primeiro.`);
                     camposComposicao['Insumo'] = idInsumo;
-                    camposComposicao['Quantidade'] = qtd;
+                    camposComposicao['Quantidade'] = qtd; // Vai para a coluna Quantidade normal
                 } else {
                     const idSubReceita = mapaIds['Receitas'][nomeIng];
                     if(!idSubReceita) throw new Error(`Sub-receita '${nomeIng}' não existe no sistema. Crie-a primeiro.`);
                     camposComposicao['Sub_Receita'] = idSubReceita;
-                    camposComposicao['Quantidade'] = qtd; 
+                    camposComposicao['Quantidade_Usada'] = qtd; // CORRIGIDO: Agora vai para a coluna 'Quantidade Usada'
                 }
 
                 acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
@@ -359,13 +358,11 @@
                 await grist.docApi.applyUserActions(acoesIngredientes);
             }
 
-            // 3. Processar Produtos e em seguida o Catálogo
-            const acoesProdutos = [];
-            const configsCatalogo = []; 
+            // 3 e 4. Processar Produtos e Catálogo de forma individual (Blindagem contra Invalid Ref)
             const tamanhos = ['P', 'M', 'G'];
             let adicionouTamanho = false;
             
-            tamanhos.forEach(tamanho => {
+            for (let tamanho of tamanhos) {
                 if (document.getElementById(`chk_${tamanho}`).checked) {
                     adicionouTamanho = true;
                     const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
@@ -376,15 +373,36 @@
                     else if(tamanho === 'M') tamanhoFormatado = 'M (350g)';
                     else if(tamanho === 'P') tamanhoFormatado = 'P (230g)';
 
-                    acoesProdutos.push(['AddRecord', 'Produtos', null, {
-                        'Nome': nomeFinalProduto,
-                        'Receita': idReceita, 
-                        'Fator_de_Rendimento': fatorRendimento
-                    }]);
+                    // Salva o Produto e aguarda a resposta exata do ID
+                    const resultProd = await grist.docApi.applyUserActions([
+                        ['AddRecord', 'Produtos', null, {
+                            'Nome': nomeFinalProduto,
+                            'Receita': idReceita, 
+                            'Fator_de_Rendimento': fatorRendimento
+                        }]
+                    ]);
+                    
+                    // Extração purificada do ID (Garante que é um número, e não um objeto/hash)
+                    let idProduto;
+                    if (Array.isArray(resultProd)) {
+                        idProduto = resultProd[0];
+                    } else if (resultProd !== null && typeof resultProd === 'object') {
+                        idProduto = Object.values(resultProd)[0];
+                    } else {
+                        idProduto = resultProd;
+                    }
 
-                    configsCatalogo.push({ tamanhoFormatado: tamanhoFormatado });
+                    // Usa o ID numérico extraído e limpo para salvar no Catálogo na mesma hora
+                    await grist.docApi.applyUserActions([
+                        ['AddRecord', 'Catalogo_Filial', null, {
+                            'Filial': idFilial,      
+                            'Produto': idProduto,    
+                            'Categoria': 'Encomendas',
+                            'Tamanho': tamanhoFormatado
+                        }]
+                    ]);
                 }
-            });
+            }
 
             if (!adicionouTamanho || linhasIngredientes.length === 0) { 
                 alert('Adicione pelo menos um tamanho e um ingrediente!');
@@ -393,34 +411,6 @@
                 return;
             }
 
-            // 4. Cria Produtos e pega os IDs criados de forma segura
-            const idsProdutosCriados = await grist.docApi.applyUserActions(acoesProdutos);
-            
-            // BLINDAGEM: Garante que os IDs retornados são um Array válido
-            let arrayIdsProdutos = [];
-            if (Array.isArray(idsProdutosCriados)) {
-                arrayIdsProdutos = idsProdutosCriados;
-            } else if (idsProdutosCriados !== null && typeof idsProdutosCriados === 'object') {
-                arrayIdsProdutos = Object.values(idsProdutosCriados);
-            } else {
-                arrayIdsProdutos = [idsProdutosCriados];
-            }
-
-            // 5. Cria vínculos no Catálogo Filial iterando nas nossas configs locais
-            const acoesCatalogo = [];
-            configsCatalogo.forEach((config, index) => {
-                const idProd = arrayIdsProdutos[index];
-                
-                acoesCatalogo.push(['AddRecord', 'Catalogo_Filial', null, {
-                    'Filial': idFilial,      
-                    'Produto': idProd,    
-                    'Categoria': 'Encomendas',
-                    'Tamanho': config.tamanhoFormatado
-                }]);
-            });
-
-            await grist.docApi.applyUserActions(acoesCatalogo);
-            
             alert('Cadastro efetuado com sucesso!');
             document.getElementById('form-produtos').reset();
             
