@@ -147,30 +147,25 @@
         'Receitas': {}
     };
 
-    // FUNÇÃO AUXILIAR PARA EXTRAIR IDS COM SEGURANÇA DA RESPOSTA DO GRIST
+    // FUNÇÃO REVISADA: Extrai o ID da resposta e falha silenciosamente caso seja inválido
+    // para que o Fallback Gigante (busca no banco) assuma o controle.
     function extrairId(resposta) {
-        if (!resposta) return null;
-        
-        // Formato padrão da API: { retValues: [ [ id_criado ] ] }
-        if (resposta.retValues && Array.isArray(resposta.retValues)) {
-            const res = resposta.retValues[0];
-            return Array.isArray(res) ? res[0] : res;
-        } 
-        // Formato simplificado: [ [ id_criado ] ]
-        else if (Array.isArray(resposta)) {
-            const res = resposta[0];
-            return Array.isArray(res) ? res[0] : res;
-        } 
-        // Fallback de segurança para buscar um array em propriedades do objeto (ignorando actionHash)
-        else if (typeof resposta === 'object') {
-            for (let chave in resposta) {
-                if (Array.isArray(resposta[chave])) {
-                    const res = resposta[chave][0];
-                    return Array.isArray(res) ? res[0] : res;
+        try {
+            if (!resposta) return null;
+            if (Array.isArray(resposta)) {
+                let v = resposta[0];
+                return typeof (Array.isArray(v) ? v[0] : v) === 'number' ? (Array.isArray(v) ? v[0] : v) : null;
+            }
+            if (typeof resposta === 'object') {
+                if (resposta.retValues && Array.isArray(resposta.retValues)) {
+                    let v = resposta.retValues[0];
+                    return typeof (Array.isArray(v) ? v[0] : v) === 'number' ? (Array.isArray(v) ? v[0] : v) : null;
                 }
             }
+        } catch(e) {
+            console.error("Erro ignorado na extração:", e);
         }
-        return resposta;
+        return null; 
     }
 
     async function carregarDadosDoBanco() {
@@ -343,8 +338,21 @@
                     }]
                 ]);
                 
-                // Utiliza a função segura de extração do ID da Receita
                 idReceita = extrairId(resultReceita);
+
+                // 🔥 FALLBACK GIGANTE: Se a API não devolver o ID claramente, 
+                // buscamos na tabela a receita que acabamos de criar.
+                if (!idReceita || typeof idReceita !== 'number') {
+                    console.log("Acionando Fallback para localizar ID da Receita...");
+                    const dadosAtuais = await grist.docApi.fetchTable('Cadastro_de_Receitas');
+                    const idx = dadosAtuais.Nome_da_Receita.lastIndexOf(nomeReceita);
+                    if (idx !== -1) {
+                        idReceita = dadosAtuais.id[idx];
+                    } else {
+                        throw new Error("Erro de comunicação: Não foi possível obter o ID da nova Receita.");
+                    }
+                }
+
                 mapaIds['Receitas'][nomeReceita] = idReceita; 
             }
 
@@ -378,7 +386,7 @@
                 await grist.docApi.applyUserActions(acoesIngredientes);
             }
 
-            // 3 e 4. Processar Produtos e Catálogo de forma individual
+            // 3 e 4. Processar Produtos e Catálogo 
             const tamanhos = ['P', 'M', 'G'];
             let adicionouTamanho = false;
             
@@ -402,10 +410,20 @@
                         }]
                     ]);
                     
-                    // Utiliza a função segura de extração do ID do Produto
-                    const idProduto = extrairId(resultProd);
+                    let idProduto = extrairId(resultProd);
 
-                    // Usa o ID numérico correto para salvar no Catálogo na mesma hora
+                    // 🔥 FALLBACK GIGANTE para o Produto também
+                    if (!idProduto || typeof idProduto !== 'number') {
+                        const prodData = await grist.docApi.fetchTable('Produtos');
+                        const idxProd = prodData.Nome.lastIndexOf(nomeFinalProduto);
+                        if (idxProd !== -1) {
+                            idProduto = prodData.id[idxProd];
+                        } else {
+                            throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
+                        }
+                    }
+
+                    // Salva no Catálogo
                     await grist.docApi.applyUserActions([
                         ['AddRecord', 'Catalogo_Filial', null, {
                             'Filial': idFilial,      
