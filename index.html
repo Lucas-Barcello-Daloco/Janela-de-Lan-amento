@@ -49,10 +49,9 @@
             <input type="text" id="filial" list="lista-filiais" required placeholder="Selecione a filial">
         </div>
 
-        <!-- Modificado: Adicionado Rendimento e Unidade para a Receita Base -->
         <div class="form-group" style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px;">
             <div>
-                <label>Nome da Receita Base (Ex: OVO-ALFAJOR):</label>
+                <label>Nome da Receita Base:</label>
                 <input type="text" id="nome_receita" list="lista-receitas" required placeholder="Selecione ou crie nova" oninput="verificarReceitaExistente()">
             </div>
             <div>
@@ -72,8 +71,8 @@
         </div>
 
         <div class="form-group">
-            <label>Nome Final do Produto (Ex: ALFAJOR):</label>
-            <input type="text" id="produto_base" required placeholder="Gerará: OVO G ALFAJOR, etc.">
+            <label>Nome Final do Produto (Ex: BOLO ALFAJOR):</label>
+            <input type="text" id="produto_base" required placeholder="Gerará: BOLO ALFAJOR P, etc.">
         </div>
 
         <h3>1. Composição da Ficha Técnica</h3>
@@ -140,26 +139,39 @@
 <script>
     grist.ready({ requiredAccess: 'full' });
 
-    // Dicionários para armazenar os dados puxados do banco
+    // Dicionários para unidades e Autofill
     const mapaUnidades = { 'Insumo': {}, 'Sub_Receita': {} };
-    const dadosReceitasBase = {}; // Guarda rendimento e unidade das receitas que já existem
+    const dadosReceitasBase = {};
+    
+    // NOVO: Dicionário Mestre de IDs para Referências
+    const mapaIds = {
+        'Filiais': {},
+        'Insumos': {},
+        'Receitas': {}
+    };
 
     async function carregarDadosDoBanco() {
         try {
+            // Nota: Nomes das tabelas ajustados de acordo com a sidebar do seu Grist
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
+            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas'); 
 
-            // Preenche Filiais
+            // Preenche Filiais e salva o ID (Puxando a coluna "Nome" ou "Filial")
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
-                filiaisData.id.forEach(idFilial => { datalistFiliais.innerHTML += `<option value="${idFilial}">`; });
+                const colNomesFiliais = filiaisData.Nome || filiaisData.Filial || filiaisData.id;
+                colNomesFiliais.forEach((nome, index) => { 
+                    mapaIds['Filiais'][nome] = filiaisData.id[index];
+                    datalistFiliais.innerHTML += `<option value="${nome}">`; 
+                });
             }
 
-            // Preenche Insumos e mapeia suas Unidades
+            // Preenche Insumos, Unidades e mapeia IDs
             const datalistInsumos = document.getElementById('lista-insumos');
             if(insumosData.Nome) {
                 insumosData.Nome.forEach((nome, index) => { 
+                    mapaIds['Insumos'][nome] = insumosData.id[index];
                     datalistInsumos.innerHTML += `<option value="${nome}">`; 
                     if(insumosData.Unidade) {
                         mapaUnidades['Insumo'][nome] = insumosData.Unidade[index];
@@ -167,19 +179,17 @@
                 });
             }
 
-            // Preenche Receitas, mapeia Unidades e guarda o Rendimento
+            // Preenche Receitas, Unidades e mapeia IDs
             const datalistReceitas = document.getElementById('lista-receitas');
             if(receitasData.Nome_da_Receita) {
                 receitasData.Nome_da_Receita.forEach((nome, index) => { 
+                    mapaIds['Receitas'][nome] = receitasData.id[index];
                     datalistReceitas.innerHTML += `<option value="${nome}">`; 
                     
                     let und = receitasData.Unidade ? receitasData.Unidade[index] : '';
-                    // ATENÇÃO: Confirme se o ID da coluna no Grist é "Rendimento_Total"
                     let rend = receitasData.Rendimento_Total ? receitasData.Rendimento_Total[index] : ''; 
 
                     if(und) mapaUnidades['Sub_Receita'][nome] = und;
-                    
-                    // Guarda para o Autofill
                     dadosReceitasBase[nome] = { unidade: und, rendimento: rend };
                 });
             }
@@ -196,14 +206,12 @@
 
     carregarDadosDoBanco();
 
-    // Função que verifica se a receita digitada já existe e preenche os campos
     function verificarReceitaExistente() {
         const nomeReceita = document.getElementById('nome_receita').value;
         const inputRend = document.getElementById('rendimento_receita');
         const selectUnd = document.getElementById('unidade_receita');
 
         if (dadosReceitasBase[nomeReceita]) {
-            // Se já existe, preenche e bloqueia os campos
             inputRend.value = dadosReceitasBase[nomeReceita].rendimento;
             selectUnd.value = dadosReceitasBase[nomeReceita].unidade;
             
@@ -212,7 +220,6 @@
             selectUnd.disabled = true;
             selectUnd.classList.add('readonly-field');
         } else {
-            // Se for nova, destrava os campos para o usuário digitar
             if (inputRend.readOnly) {
                 inputRend.value = '';
                 inputRend.readOnly = false;
@@ -289,7 +296,7 @@
     document.getElementById('form-produtos').addEventListener('submit', async function(e) {
         e.preventDefault();
 
-        const filial = document.getElementById('filial').value;
+        const filialNome = document.getElementById('filial').value;
         const nomeReceita = document.getElementById('nome_receita').value;
         const rendimentoReceita = parseFloat(document.getElementById('rendimento_receita').value);
         const unidadeReceita = document.getElementById('unidade_receita').value;
@@ -297,44 +304,66 @@
         const btnSubmit = document.querySelector('.btn-submit');
         
         try {
-            btnSubmit.innerText = 'Processando...';
-            btnSubmit.disabled = true;
-
-            const actions = []; 
-            
-            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas');
-            const receitasExistentes = receitasData.Nome_da_Receita || [];
-
-            // Se for uma receita NOVA, salva com o Nome, Rendimento e Unidade
-            if (!receitasExistentes.includes(nomeReceita)) {
-                actions.push(['AddRecord', 'Cadastro_de_Receitas', null, {
-                    'Nome_da_Receita': nomeReceita,
-                    'Rendimento_Total': rendimentoReceita, // Verifique se este é o ID exato da coluna no Grist
-                    'Unidade': unidadeReceita
-                }]);
+            // Validação de segurança: Verifica se a filial selecionada existe no mapa
+            const idFilial = mapaIds['Filiais'][filialNome];
+            if (!idFilial) {
+                alert('Filial não encontrada. Por favor, selecione uma filial válida da lista.');
+                return;
             }
 
+            btnSubmit.innerText = 'Processando...';
+            btnSubmit.disabled = true;
+            
+            // 1. Processar Cadastro da Receita Base
+            let idReceita = mapaIds['Receitas'][nomeReceita];
+            if (!idReceita) {
+                // Se for nova, cria a receita primeiro e aguarda o ID gerado pelo Grist
+                const resultReceita = await grist.docApi.applyUserActions([
+                    ['AddRecord', 'Cadastro_Receitas', null, {
+                        'Nome_da_Receita': nomeReceita,
+                        'Rendimento_Total': rendimentoReceita, 
+                        'Unidade': unidadeReceita
+                    }]
+                ]);
+                idReceita = resultReceita[0]; // Pega o ID numérico da nova linha
+                mapaIds['Receitas'][nomeReceita] = idReceita; // Salva no mapa para uso futuro
+            }
+
+            // 2. Processar Ingredientes (Composição)
+            const acoesIngredientes = [];
             const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
-            linhasIngredientes.forEach(linha => {
+            
+            for(let linha of linhasIngredientes) {
                 const nomeIng = linha.querySelector('.ing-nome').value;
                 const tipo = linha.querySelector('.ing-tipo').value;
                 const qtd = parseFloat(linha.querySelector('.ing-qtd').value);
 
-                let camposComposicao = {
-                    'ID_Nome': nomeReceita 
-                };
+                // Em colunas de referência enviamos sempre o ID gerado, não o texto
+                let camposComposicao = { 'ID_Nome': idReceita };
 
                 if (tipo === 'Insumo') {
-                    camposComposicao['Insumo'] = nomeIng;
+                    const idInsumo = mapaIds['Insumos'][nomeIng];
+                    if(!idInsumo) throw new Error(`Insumo '${nomeIng}' não existe no sistema. Crie-o primeiro.`);
+                    camposComposicao['Insumo'] = idInsumo;
                     camposComposicao['Quantidade'] = qtd;
                 } else {
-                    camposComposicao['Sub_Receita'] = nomeIng;
-                    camposComposicao['Quantidade_Usada'] = qtd; 
+                    const idSubReceita = mapaIds['Receitas'][nomeIng];
+                    if(!idSubReceita) throw new Error(`Sub-receita '${nomeIng}' não existe no sistema. Crie-a primeiro.`);
+                    camposComposicao['Sub_Receita'] = idSubReceita;
+                    camposComposicao['Quantidade'] = qtd; 
                 }
 
-                actions.push(['AddRecord', 'Receitas', null, camposComposicao]);
-            });
+                // Ajustado para 'Composicao_Receita' conforme print
+                acoesIngredientes.push(['AddRecord', 'Composicao_Receita', null, camposComposicao]);
+            };
 
+            if (acoesIngredientes.length > 0) {
+                await grist.docApi.applyUserActions(acoesIngredientes);
+            }
+
+            // 3. Processar Produtos e em seguida o Catálogo
+            const acoesProdutos = [];
+            const configsCatalogo = []; // Guarda as informações para o Catálogo depois de pegar o ID
             const tamanhos = ['P', 'M', 'G'];
             let adicionouTamanho = false;
             
@@ -342,25 +371,23 @@
                 if (document.getElementById(`chk_${tamanho}`).checked) {
                     adicionouTamanho = true;
                     const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
-                    const nomeFinalProduto = `OVO ${tamanho} ${produtoBase}`;
+                    
+                    // Modificação: Removido o OVO, junta apenas o Nome + Tamanho (Ex: "ALFAJOR G")
+                    const nomeFinalProduto = `${produtoBase} ${tamanho}`;
 
                     let tamanhoFormatado = '';
                     if(tamanho === 'G') tamanhoFormatado = 'G (450g)';
                     else if(tamanho === 'M') tamanhoFormatado = 'M (350g)';
                     else if(tamanho === 'P') tamanhoFormatado = 'P (230g)';
 
-                    actions.push(['AddRecord', 'Produtos', null, {
+                    acoesProdutos.push(['AddRecord', 'Produtos', null, {
                         'Nome': nomeFinalProduto,
-                        'Receita': nomeReceita,
+                        'Receita': idReceita, // Link de Referência por ID
                         'Fator_de_Rendimento': fatorRendimento
                     }]);
 
-                    actions.push(['AddRecord', 'Catalogo_Filial', null, {
-                        'Filial': filial,
-                        'Produto': nomeFinalProduto,
-                        'Categoria': 'Encomendas',
-                        'Tamanho': tamanhoFormatado
-                    }]);
+                    // Guarda em memória para fazer a vinculação depois que o Produto tiver ID
+                    configsCatalogo.push({ tamanhoFormatado: tamanhoFormatado });
                 }
             });
 
@@ -371,12 +398,25 @@
                 return;
             }
 
-            await grist.docApi.applyUserActions(actions);
+            // Cria Produtos e pega os IDs criados de volta
+            const idsProdutosCriados = await grist.docApi.applyUserActions(acoesProdutos);
+            
+            // 4. Cria vínculos no Catálogo Filial com os IDs corretos
+            const acoesCatalogo = [];
+            idsProdutosCriados.forEach((idProduto, index) => {
+                acoesCatalogo.push(['AddRecord', 'Catalogo_Filial', null, {
+                    'Filial': idFilial,      // Link de Referência da Filial (ID)
+                    'Produto': idProduto,    // Link de Referência do Produto (ID)
+                    'Categoria': 'Encomendas',
+                    'Tamanho': configsCatalogo[index].tamanhoFormatado
+                }]);
+            });
+
+            await grist.docApi.applyUserActions(acoesCatalogo);
             
             alert('Cadastro efetuado com sucesso!');
             document.getElementById('form-produtos').reset();
             
-            // Força a liberação dos campos de receita após o reset
             document.getElementById('rendimento_receita').readOnly = false;
             document.getElementById('rendimento_receita').classList.remove('readonly-field');
             document.getElementById('unidade_receita').disabled = false;
