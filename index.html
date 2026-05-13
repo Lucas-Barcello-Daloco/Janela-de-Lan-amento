@@ -152,12 +152,12 @@
 
     async function carregarDadosDoBanco() {
         try {
-            // Nota: Nomes das tabelas ajustados de acordo com a sidebar do seu Grist
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
-            const receitasData = await grist.docApi.fetchTable('Cadastro_Receitas'); 
+            // Corrigido: Agora puxa estritamente de 'Cadastro_de_Receitas'
+            const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
 
-            // Preenche Filiais e salva o ID (Puxando a coluna "Nome" ou "Filial")
+            // Preenche Filiais e salva o ID
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
                 const colNomesFiliais = filiaisData.Nome || filiaisData.Filial || filiaisData.id;
@@ -317,9 +317,9 @@
             // 1. Processar Cadastro da Receita Base
             let idReceita = mapaIds['Receitas'][nomeReceita];
             if (!idReceita) {
-                // Se for nova, cria a receita primeiro e aguarda o ID gerado pelo Grist
+                // Corrigido: Cadastro na tabela 'Cadastro_de_Receitas'
                 const resultReceita = await grist.docApi.applyUserActions([
-                    ['AddRecord', 'Cadastro_Receitas', null, {
+                    ['AddRecord', 'Cadastro_de_Receitas', null, {
                         'Nome_da_Receita': nomeReceita,
                         'Rendimento_Total': rendimentoReceita, 
                         'Unidade': unidadeReceita
@@ -353,7 +353,6 @@
                     camposComposicao['Quantidade'] = qtd; 
                 }
 
-                // Ajustado para 'Composicao_Receita' conforme print
                 acoesIngredientes.push(['AddRecord', 'Composicao_Receita', null, camposComposicao]);
             };
 
@@ -363,7 +362,7 @@
 
             // 3. Processar Produtos e em seguida o Catálogo
             const acoesProdutos = [];
-            const configsCatalogo = []; // Guarda as informações para o Catálogo depois de pegar o ID
+            const configsCatalogo = []; 
             const tamanhos = ['P', 'M', 'G'];
             let adicionouTamanho = false;
             
@@ -372,7 +371,6 @@
                     adicionouTamanho = true;
                     const fatorRendimento = parseFloat(document.getElementById(`fator_${tamanho}`).value);
                     
-                    // Modificação: Removido o OVO, junta apenas o Nome + Tamanho (Ex: "ALFAJOR G")
                     const nomeFinalProduto = `${produtoBase} ${tamanho}`;
 
                     let tamanhoFormatado = '';
@@ -386,7 +384,6 @@
                         'Fator_de_Rendimento': fatorRendimento
                     }]);
 
-                    // Guarda em memória para fazer a vinculação depois que o Produto tiver ID
                     configsCatalogo.push({ tamanhoFormatado: tamanhoFormatado });
                 }
             });
