@@ -147,6 +147,32 @@
         'Receitas': {}
     };
 
+    // FUNÇÃO AUXILIAR PARA EXTRAIR IDS COM SEGURANÇA DA RESPOSTA DO GRIST
+    function extrairId(resposta) {
+        if (!resposta) return null;
+        
+        // Formato padrão da API: { retValues: [ [ id_criado ] ] }
+        if (resposta.retValues && Array.isArray(resposta.retValues)) {
+            const res = resposta.retValues[0];
+            return Array.isArray(res) ? res[0] : res;
+        } 
+        // Formato simplificado: [ [ id_criado ] ]
+        else if (Array.isArray(resposta)) {
+            const res = resposta[0];
+            return Array.isArray(res) ? res[0] : res;
+        } 
+        // Fallback de segurança para buscar um array em propriedades do objeto (ignorando actionHash)
+        else if (typeof resposta === 'object') {
+            for (let chave in resposta) {
+                if (Array.isArray(resposta[chave])) {
+                    const res = resposta[chave][0];
+                    return Array.isArray(res) ? res[0] : res;
+                }
+            }
+        }
+        return resposta;
+    }
+
     async function carregarDadosDoBanco() {
         try {
             const filiaisData = await grist.docApi.fetchTable('Filiais');
@@ -317,14 +343,8 @@
                     }]
                 ]);
                 
-                if (Array.isArray(resultReceita)) {
-                    idReceita = resultReceita[0];
-                } else if (resultReceita !== null && typeof resultReceita === 'object') {
-                    idReceita = Object.values(resultReceita)[0];
-                } else {
-                    idReceita = resultReceita;
-                }
-                
+                // Utiliza a função segura de extração do ID da Receita
+                idReceita = extrairId(resultReceita);
                 mapaIds['Receitas'][nomeReceita] = idReceita; 
             }
 
@@ -343,12 +363,12 @@
                     const idInsumo = mapaIds['Insumos'][nomeIng];
                     if(!idInsumo) throw new Error(`Insumo '${nomeIng}' não existe no sistema. Crie-o primeiro.`);
                     camposComposicao['Insumo'] = idInsumo;
-                    camposComposicao['Quantidade'] = qtd; // Vai para a coluna Quantidade normal
+                    camposComposicao['Quantidade'] = qtd; 
                 } else {
                     const idSubReceita = mapaIds['Receitas'][nomeIng];
                     if(!idSubReceita) throw new Error(`Sub-receita '${nomeIng}' não existe no sistema. Crie-a primeiro.`);
                     camposComposicao['Sub_Receita'] = idSubReceita;
-                    camposComposicao['Quantidade_Usada'] = qtd; // CORRIGIDO: Agora vai para a coluna 'Quantidade Usada'
+                    camposComposicao['Quantidade_Usada'] = qtd; 
                 }
 
                 acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
@@ -358,7 +378,7 @@
                 await grist.docApi.applyUserActions(acoesIngredientes);
             }
 
-            // 3 e 4. Processar Produtos e Catálogo de forma individual (Blindagem contra Invalid Ref)
+            // 3 e 4. Processar Produtos e Catálogo de forma individual
             const tamanhos = ['P', 'M', 'G'];
             let adicionouTamanho = false;
             
@@ -373,7 +393,7 @@
                     else if(tamanho === 'M') tamanhoFormatado = 'M (350g)';
                     else if(tamanho === 'P') tamanhoFormatado = 'P (230g)';
 
-                    // Salva o Produto e aguarda a resposta exata do ID
+                    // Salva o Produto
                     const resultProd = await grist.docApi.applyUserActions([
                         ['AddRecord', 'Produtos', null, {
                             'Nome': nomeFinalProduto,
@@ -382,17 +402,10 @@
                         }]
                     ]);
                     
-                    // Extração purificada do ID (Garante que é um número, e não um objeto/hash)
-                    let idProduto;
-                    if (Array.isArray(resultProd)) {
-                        idProduto = resultProd[0];
-                    } else if (resultProd !== null && typeof resultProd === 'object') {
-                        idProduto = Object.values(resultProd)[0];
-                    } else {
-                        idProduto = resultProd;
-                    }
+                    // Utiliza a função segura de extração do ID do Produto
+                    const idProduto = extrairId(resultProd);
 
-                    // Usa o ID numérico extraído e limpo para salvar no Catálogo na mesma hora
+                    // Usa o ID numérico correto para salvar no Catálogo na mesma hora
                     await grist.docApi.applyUserActions([
                         ['AddRecord', 'Catalogo_Filial', null, {
                             'Filial': idFilial,      
