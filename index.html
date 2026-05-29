@@ -31,6 +31,8 @@
 
         .info-text { font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px; }
         #status-loading { color: #e67e22; font-weight: bold; margin-bottom: 15px; }
+        
+        #aviso-receita-existente { display: none; background: #fff3cd; color: #856404; padding: 12px; margin-bottom: 15px; border-radius: 4px; border-left: 4px solid #ffeeba; font-size: 13px; }
     </style>
 </head>
 <body>
@@ -115,8 +117,12 @@
         <h3>2. Composição da Ficha Técnica</h3>
         <p class="info-text">Insira os ingredientes da Receita Base e verifique a unidade de medida correta.</p>
         
+        <div id="aviso-receita-existente">
+            <strong>Aviso:</strong> Esta Receita Base já existe no sistema. A composição abaixo é apenas para visualização. Novas edições ou inclusões de ingredientes devem ser feitas direto no painel da ficha técnica.
+        </div>
+
         <div id="lista-ingredientes-container"></div>
-        <button type="button" class="btn-add" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
+        <button type="button" class="btn-add" id="btn-add-ingrediente" onclick="adicionarLinhaIngrediente()">+ Adicionar Insumo/Sub-receita</button>
 
         <h3>3. Criação dos Tamanhos / Variações</h3>
         <p class="info-text">Adicione os tamanhos disponíveis (ex: P, M, 20cm, Inteiro). Defina o texto pro catálogo e o fator de rendimento.</p>
@@ -133,11 +139,20 @@
 
     const mapaUnidades = { 'Insumo': {}, 'Sub_Receita': {} };
     const dadosReceitasBase = {};
+    
     const mapaIds = {
         'Filiais': {},
         'Insumos': {},
         'Receitas': {}
     };
+
+    const mapaNomes = {
+        'Insumos': {},
+        'Receitas': {}
+    };
+
+    const composicaoReceitas = {};
+    let ultimaReceitaSelecionada = ''; 
 
     function extrairId(resposta) {
         try {
@@ -163,8 +178,8 @@
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
+            const composicaoData = await grist.docApi.fetchTable('Receitas'); 
 
-            // Populando Filiais
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
                 const colNomesFiliais = filiaisData.Nome || filiaisData.Filial || filiaisData.id;
@@ -174,11 +189,13 @@
                 });
             }
 
-            // Populando Insumos
             const datalistInsumos = document.getElementById('lista-insumos');
             if(insumosData.Nome) {
                 insumosData.Nome.forEach((nome, index) => { 
-                    mapaIds['Insumos'][nome] = insumosData.id[index];
+                    const idInsumo = insumosData.id[index];
+                    mapaIds['Insumos'][nome] = idInsumo;
+                    mapaNomes['Insumos'][idInsumo] = nome; 
+                    
                     datalistInsumos.innerHTML += `<option value="${nome}">`; 
                     if(insumosData.Unidade) {
                         mapaUnidades['Insumo'][nome] = insumosData.Unidade[index];
@@ -186,11 +203,13 @@
                 });
             }
 
-            // Populando Receitas Base
             const datalistReceitas = document.getElementById('lista-receitas');
             if(receitasData.Nome_da_Receita) {
                 receitasData.Nome_da_Receita.forEach((nome, index) => { 
-                    mapaIds['Receitas'][nome] = receitasData.id[index];
+                    const idReceita = receitasData.id[index];
+                    mapaIds['Receitas'][nome] = idReceita;
+                    mapaNomes['Receitas'][idReceita] = nome; 
+                    
                     datalistReceitas.innerHTML += `<option value="${nome}">`; 
                     
                     let und = receitasData.Unidade ? receitasData.Unidade[index] : '';
@@ -201,9 +220,28 @@
                 });
             }
 
-            // =====================================================================
-            // LEITURA DINÂMICA DAS CONFIGURAÇÕES DA COLUNA "CATEGORIA" NO GRIST
-            // =====================================================================
+            if (composicaoData.ID_Nome) {
+                composicaoData.ID_Nome.forEach((idBaseRaw, index) => {
+                    let idBase = Array.isArray(idBaseRaw) ? idBaseRaw[0] : idBaseRaw;
+                    
+                    if (!composicaoReceitas[idBase]) composicaoReceitas[idBase] = [];
+
+                    let idInsumo = composicaoData.Insumo ? composicaoData.Insumo[index] : null;
+                    let idSubReceita = composicaoData.Sub_Receita ? composicaoData.Sub_Receita[index] : null;
+                    let qtdInsumo = composicaoData.Quantidade ? composicaoData.Quantidade[index] : null;
+                    let qtdSub = composicaoData.Quantidade_Usada ? composicaoData.Quantidade_Usada[index] : null;
+
+                    idInsumo = Array.isArray(idInsumo) ? idInsumo[0] : idInsumo;
+                    idSubReceita = Array.isArray(idSubReceita) ? idSubReceita[0] : idSubReceita;
+
+                    if (idInsumo && idInsumo !== 0) {
+                        composicaoReceitas[idBase].push({ tipo: 'Insumo', idItem: idInsumo, qtd: qtdInsumo });
+                    } else if (idSubReceita && idSubReceita !== 0) {
+                        composicaoReceitas[idBase].push({ tipo: 'Sub_Receita', idItem: idSubReceita, qtd: qtdSub });
+                    }
+                });
+            }
+
             let categoriasEncontradas = [];
             try {
                 const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
@@ -214,7 +252,6 @@
                 if (indexTabela !== -1) {
                     const idTabela = tablesInfo.id[indexTabela];
                     for (let i = 0; i < columnsInfo.colId.length; i++) {
-                        // Verifica se é a coluna Categoria dentro da tabela Catalogo_Filial
                         if (columnsInfo.colId[i] === 'Categoria' && columnsInfo.parentId[i] === idTabela) {
                             const opcoesStr = columnsInfo.widgetOptions[i];
                             if (opcoesStr) {
@@ -226,10 +263,9 @@
                     }
                 }
             } catch (e) {
-                console.warn("Aviso: Não foi possível ler as opções nativas. Tentando fallback...", e);
+                console.warn("Aviso: Não foi possível ler as opções nativas.", e);
             }
 
-            // Fallback: Se não encontrou opções nas configurações ocultas, faz a varredura das linhas existentes
             if (categoriasEncontradas.length === 0) {
                 const catalogoData = await grist.docApi.fetchTable('Catalogo_Filial');
                 if (catalogoData.Categoria) {
@@ -237,7 +273,6 @@
                 }
             }
 
-            // Popula o select com as categorias encontradas
             const selectCategoria = document.getElementById('categoria');
             selectCategoria.innerHTML = '<option value="" disabled selected>Selecione a categoria...</option>';
             categoriasEncontradas.forEach(cat => {
@@ -256,10 +291,32 @@
 
     carregarDadosDoBanco();
 
+    // Trava Visual (UI) da Composição
+    function travarIngredientes(travar) {
+        const container = document.getElementById('lista-ingredientes-container');
+        const inputs = container.querySelectorAll('input, select, button');
+        
+        inputs.forEach(el => {
+            el.disabled = travar;
+            if (travar) {
+                el.classList.add('readonly-field');
+            } else {
+                el.classList.remove('readonly-field');
+            }
+        });
+        
+        document.getElementById('btn-add-ingrediente').style.display = travar ? 'none' : 'block';
+        document.getElementById('aviso-receita-existente').style.display = travar ? 'block' : 'none';
+    }
+
     function verificarReceitaExistente() {
         const nomeReceita = document.getElementById('nome_receita').value;
         const inputRend = document.getElementById('rendimento_receita');
         const selectUnd = document.getElementById('unidade_receita');
+        const containerIngredientes = document.getElementById('lista-ingredientes-container');
+
+        if (nomeReceita === ultimaReceitaSelecionada) return;
+        ultimaReceitaSelecionada = nomeReceita;
 
         if (dadosReceitasBase[nomeReceita]) {
             inputRend.value = dadosReceitasBase[nomeReceita].rendimento;
@@ -269,7 +326,33 @@
             inputRend.classList.add('readonly-field');
             selectUnd.disabled = true;
             selectUnd.classList.add('readonly-field');
+
+            const idReceita = mapaIds['Receitas'][nomeReceita];
+            const ingredientesDaReceita = composicaoReceitas[idReceita] || [];
+
+            containerIngredientes.innerHTML = ''; 
+            
+            if (ingredientesDaReceita.length > 0) {
+                ingredientesDaReceita.forEach(item => {
+                    const tipoMapa = item.tipo === 'Insumo' ? 'Insumos' : 'Receitas';
+                    const nomeDoItem = mapaNomes[tipoMapa][item.idItem];
+                    
+                    if (nomeDoItem) {
+                        adicionarLinhaIngrediente(nomeDoItem, item.tipo, item.qtd);
+                    }
+                });
+            } else {
+                // Caso a receita exista mas não tenha ingredientes salvos
+                adicionarLinhaIngrediente('-', 'Insumo', 0);
+            }
+            
+            // Ativa a trava de edição
+            travarIngredientes(true);
+
         } else {
+            // Nova receita (destrava os campos)
+            travarIngredientes(false);
+            
             if (inputRend.readOnly) {
                 inputRend.value = '';
                 inputRend.readOnly = false;
@@ -277,6 +360,9 @@
                 
                 selectUnd.disabled = false;
                 selectUnd.classList.remove('readonly-field');
+                
+                containerIngredientes.innerHTML = '';
+                adicionarLinhaIngrediente();
             }
         }
     }
@@ -296,29 +382,33 @@
         }
     }
 
-    function adicionarLinhaIngrediente() {
+    function adicionarLinhaIngrediente(nomeVal = '', tipoVal = 'Insumo', qtdVal = '') {
         const container = document.getElementById('lista-ingredientes-container');
-        const idLinha = Date.now();
+        const idLinha = Date.now() + Math.floor(Math.random() * 1000); 
         
         const div = document.createElement('div');
         div.className = 'ingrediente-row';
         div.id = `ingrediente-${idLinha}`;
         
+        const listTarget = tipoVal === 'Insumo' ? 'lista-insumos' : 'lista-receitas';
+        const selectInsumo = tipoVal === 'Insumo' ? 'selected' : '';
+        const selectSub = tipoVal === 'Sub_Receita' ? 'selected' : '';
+
         div.innerHTML = `
             <div>
                 <label>Insumo ou Sub-receita</label>
-                <input type="text" class="ing-nome" list="lista-insumos" required placeholder="Digite para buscar..." oninput="atualizarUnidade(${idLinha})">
+                <input type="text" class="ing-nome" list="${listTarget}" required placeholder="Digite para buscar..." value="${nomeVal}" oninput="atualizarUnidade(${idLinha})">
             </div>
             <div>
                 <label>Tipo</label>
                 <select class="ing-tipo" onchange="atualizarDatalist(this, ${idLinha})">
-                    <option value="Insumo">Insumo</option>
-                    <option value="Sub_Receita">Sub-receita</option>
+                    <option value="Insumo" ${selectInsumo}>Insumo</option>
+                    <option value="Sub_Receita" ${selectSub}>Sub-receita</option>
                 </select>
             </div>
             <div>
                 <label>Quantidade</label>
-                <input type="number" class="ing-qtd" step="0.01" required placeholder="Ex: 140">
+                <input type="number" class="ing-qtd" step="0.01" required placeholder="Ex: 140" value="${qtdVal}">
             </div>
             <div>
                 <label>Unid.</label>
@@ -329,6 +419,10 @@
             </div>
         `;
         container.appendChild(div);
+
+        if (nomeVal !== '' && nomeVal !== '-') {
+            atualizarUnidade(idLinha);
+        }
     }
 
     function adicionarVariacao() {
@@ -396,14 +490,12 @@
     document.getElementById('form-produtos').addEventListener('submit', async function(e) {
         e.preventDefault();
 
-        // Dados base
         const filialNome = document.getElementById('filial').value;
         const nomeReceita = document.getElementById('nome_receita').value;
         const rendimentoReceita = parseFloat(document.getElementById('rendimento_receita').value);
         const unidadeReceita = document.getElementById('unidade_receita').value;
         const produtoBase = document.getElementById('produto_base').value;
         
-        // Dados Catálogo
         const nomeProdutoCatalogo = document.getElementById('nome_produto_catalogo').value;
         const tipoVenda = document.getElementById('tipo_venda').value;
         const categoria = document.getElementById('categoria').value;
@@ -415,8 +507,11 @@
         const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
         const linhasVariacoes = document.querySelectorAll('.variacao-row');
 
-        if (linhasIngredientes.length === 0) {
-            alert('Adicione pelo menos um ingrediente!'); return;
+        // Flag crucial de validação para pular a etapa 2
+        let receitaJaExistia = (mapaIds['Receitas'][nomeReceita] !== undefined);
+
+        if (!receitaJaExistia && linhasIngredientes.length === 0) {
+            alert('Adicione pelo menos um ingrediente para a nova receita!'); return;
         }
         if (linhasVariacoes.length === 0) {
             alert('Adicione pelo menos um tamanho/variação!'); return;
@@ -454,31 +549,36 @@
                 mapaIds['Receitas'][nomeReceita] = idReceita; 
             }
 
-            // 2. Processar Ingredientes (Composição)
-            const acoesIngredientes = [];
-            for(let linha of linhasIngredientes) {
-                const nomeIng = linha.querySelector('.ing-nome').value;
-                const tipo = linha.querySelector('.ing-tipo').value;
-                const qtd = parseFloat(linha.querySelector('.ing-qtd').value);
+            // 2. Processar Ingredientes (TRAVADO SE A RECEITA JÁ EXISTIA)
+            if (!receitaJaExistia) {
+                const acoesIngredientes = [];
+                for(let linha of linhasIngredientes) {
+                    const nomeIng = linha.querySelector('.ing-nome').value;
+                    const tipo = linha.querySelector('.ing-tipo').value;
+                    const qtd = parseFloat(linha.querySelector('.ing-qtd').value);
 
-                let camposComposicao = { 'ID_Nome': idReceita };
+                    let camposComposicao = { 'ID_Nome': idReceita };
 
-                if (tipo === 'Insumo') {
-                    const idInsumo = mapaIds['Insumos'][nomeIng];
-                    if(!idInsumo) throw new Error(`Insumo '${nomeIng}' não existe no sistema. Crie-o primeiro.`);
-                    camposComposicao['Insumo'] = idInsumo;
-                    camposComposicao['Quantidade'] = qtd; 
-                } else {
-                    const idSubReceita = mapaIds['Receitas'][nomeIng];
-                    if(!idSubReceita) throw new Error(`Sub-receita '${nomeIng}' não existe no sistema. Crie-a primeiro.`);
-                    camposComposicao['Sub_Receita'] = idSubReceita;
-                    camposComposicao['Quantidade_Usada'] = qtd; 
+                    if (tipo === 'Insumo') {
+                        const idInsumo = mapaIds['Insumos'][nomeIng];
+                        if(!idInsumo) throw new Error(`Insumo '${nomeIng}' não existe no sistema. Crie-o primeiro.`);
+                        camposComposicao['Insumo'] = idInsumo;
+                        camposComposicao['Quantidade'] = qtd; 
+                    } else {
+                        const idSubReceita = mapaIds['Receitas'][nomeIng];
+                        if(!idSubReceita) throw new Error(`Sub-receita '${nomeIng}' não existe no sistema. Crie-a primeiro.`);
+                        camposComposicao['Sub_Receita'] = idSubReceita;
+                        camposComposicao['Quantidade_Usada'] = qtd; 
+                    }
+                    
+                    acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
+                };
+
+                if (acoesIngredientes.length > 0) {
+                    await grist.docApi.applyUserActions(acoesIngredientes);
                 }
-                acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
-            };
-
-            if (acoesIngredientes.length > 0) {
-                await grist.docApi.applyUserActions(acoesIngredientes);
+            } else {
+                console.log("Receita já existia no banco. Etapa de composição ignorada para evitar duplicidade.");
             }
 
             // 3 e 4. Processar Produtos (Tamanhos) e Catálogo dinâmicos
@@ -489,7 +589,6 @@
                 
                 const nomeFinalProduto = `${produtoBase} ${siglaTamanho}`.trim();
 
-                // Salva o Produto
                 const resultProd = await grist.docApi.applyUserActions([
                     ['AddRecord', 'Produtos', null, {
                         'Nome': nomeFinalProduto,
@@ -507,7 +606,6 @@
                     else throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
                 }
 
-                // Salva no Catálogo 
                 await grist.docApi.applyUserActions([
                     ['AddRecord', 'Catalogo_Filial', null, {
                         'Filial': idFilial,      
@@ -525,12 +623,14 @@
             alert('Cadastro efetuado com sucesso!');
             document.getElementById('form-produtos').reset();
             
-            // Restaura estado inicial
+            // Restaura estado inicial UI
             document.getElementById('rendimento_receita').readOnly = false;
             document.getElementById('rendimento_receita').classList.remove('readonly-field');
             document.getElementById('unidade_receita').disabled = false;
             document.getElementById('unidade_receita').classList.remove('readonly-field');
+            ultimaReceitaSelecionada = ''; 
             toggleAntecedencia(); 
+            travarIngredientes(false); // Reseta a trava
 
             document.getElementById('lista-ingredientes-container').innerHTML = '';
             document.getElementById('lista-variacoes-container').innerHTML = '';
