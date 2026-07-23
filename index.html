@@ -443,15 +443,8 @@
                 <input type="text" class="var-desc" placeholder="Ex: P (230g) ou M(20cm)" required>
             </div>
             <div>
-                <label>Rendimento</label>
-                <select class="var-fator">
-                    <option value="1">Rende 1 un. (Fator 1.0)</option>
-                    <option value="0.66">Rende 1,5 un. (Fator 0.66)</option>
-                    <option value="0.5">Rende 2 un. (Fator 0.5)</option>
-                    <option value="0.33">Rende 3 un. (Fator 0.33)</option>
-                    <option value="0.25">Rende 4 un. (Fator 0.25)</option>
-                    <option value="0.2">Rende 5 un. (Fator 0.2)</option>
-                </select>
+                <label>Rende quantas un.?</label>
+                <input type="number" class="var-rendimento-qtd" step="0.01" min="0.01" placeholder="Ex: 16" required>
             </div>
             <div>
                 <button type="button" class="btn-remove" onclick="removerLinha('variacao-${idVar}')">X</button>
@@ -585,7 +578,14 @@
             for (let row of linhasVariacoes) {
                 const siglaTamanho = row.querySelector('.var-sigla').value.trim();
                 const descTamanho = row.querySelector('.var-desc').value.trim();
-                const fatorRendimento = parseFloat(row.querySelector('.var-fator').value);
+                
+                // Pega a quantidade digitada pelo usuário (Ex: 16)
+                const qtdRendimento = parseFloat(row.querySelector('.var-rendimento-qtd').value);
+                
+                // Calcula o Fator de Rendimento automaticamente.
+                // Ex: Se rende 16, o fator é 1 / 16 = 0.0625.
+                // Usamos toFixed(6) para evitar dízimas periódicas infinitas gigantes.
+                const fatorRendimento = parseFloat((1 / qtdRendimento).toFixed(6));
                 
                 const nomeFinalProduto = `${produtoBase} ${siglaTamanho}`.trim();
 
