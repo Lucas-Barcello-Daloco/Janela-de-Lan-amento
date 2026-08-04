@@ -33,6 +33,8 @@
         #status-loading { color: #e67e22; font-weight: bold; margin-bottom: 15px; }
         
         #aviso-receita-existente { display: none; background: #fff3cd; color: #856404; padding: 12px; margin-bottom: 15px; border-radius: 4px; border-left: 4px solid #ffeeba; font-size: 13px; }
+        
+        .box-modo { background: #e8f4f8; padding: 15px; border-radius: 6px; border: 1px solid #bfe0ed; margin-bottom: 20px; }
     </style>
 </head>
 <body>
@@ -46,18 +48,41 @@
         
         <datalist id="lista-filiais"></datalist>
         <datalist id="lista-insumos"></datalist>
-        <datalist id="lista-receitas"></datalist>
+        <datalist id="lista-receitas-base"></datalist>
 
         <div class="form-group">
             <label>Filial:</label>
             <input type="text" id="filial" list="lista-filiais" required placeholder="Selecione a filial">
         </div>
 
-        <div class="form-group grid-3">
-            <div>
-                <label>Nome da Receita Base:</label>
-                <input type="text" id="nome_receita" list="lista-receitas" required placeholder="Selecione ou crie nova" oninput="verificarReceitaExistente()">
+        <!-- NOVO: Seletor de Modo de Lançamento -->
+        <div class="box-modo">
+            <label>Como deseja iniciar o lançamento?</label>
+            <div style="display: flex; gap: 20px; margin-top: 10px;">
+                <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <input type="radio" name="modo_receita" value="nova" checked onchange="alternarModo()"> 
+                    Criar Nova Receita Base
+                </label>
+                <label style="font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                    <input type="radio" name="modo_receita" value="existente" onchange="alternarModo()"> 
+                    Usar Receita Base Existente
+                </label>
             </div>
+        </div>
+
+        <div class="form-group grid-3">
+            <div id="container-receita-nova">
+                <label>Nome da Nova Receita Base:</label>
+                <input type="text" id="nome_receita_nova" placeholder="Ex: Massa de Baunilha" required>
+            </div>
+            
+            <div id="container-receita-existente" style="display: none;">
+                <label>Selecione a Receita Existente:</label>
+                <select id="nome_receita_existente" onchange="carregarReceitaSelecionada()">
+                    <option value="" disabled selected>Carregando...</option>
+                </select>
+            </div>
+
             <div>
                 <label>Rend. Total (Ex: 1000):</label>
                 <input type="number" id="rendimento_receita" step="0.01" required placeholder="Qtd">
@@ -118,7 +143,7 @@
         <p class="info-text">Insira os ingredientes da Receita Base e verifique a unidade de medida correta.</p>
         
         <div id="aviso-receita-existente">
-            <strong>Aviso:</strong> Esta Receita Base já existe no sistema. A composição abaixo é apenas para visualização. Novas edições ou inclusões de ingredientes devem ser feitas direto no painel da ficha técnica.
+            <strong>Aviso:</strong> Você selecionou uma Receita Base existente. A composição abaixo é apenas para visualização. Adicione as variações de tamanho no passo 3.
         </div>
 
         <div id="lista-ingredientes-container"></div>
@@ -140,10 +165,13 @@
     const mapaUnidades = { 'Insumo': {}, 'Sub_Receita': {} };
     const dadosReceitasBase = {};
     
+    // Mapeamentos para evitar duplicações
     const mapaIds = {
         'Filiais': {},
         'Insumos': {},
-        'Receitas': {}
+        'Receitas': {},
+        'Produtos': {}, 
+        'Catalogo': {}  
     };
 
     const mapaNomes = {
@@ -152,7 +180,6 @@
     };
 
     const composicaoReceitas = {};
-    let ultimaReceitaSelecionada = ''; 
 
     function extrairId(resposta) {
         try {
@@ -167,19 +194,21 @@
                     return typeof (Array.isArray(v) ? v[0] : v) === 'number' ? (Array.isArray(v) ? v[0] : v) : null;
                 }
             }
-        } catch(e) {
-            console.error("Erro ignorado na extração:", e);
-        }
+        } catch(e) {}
         return null; 
     }
 
     async function carregarDadosDoBanco() {
         try {
+            // Buscando todas as tabelas relevantes
             const filiaisData = await grist.docApi.fetchTable('Filiais');
             const insumosData = await grist.docApi.fetchTable('Insumos');
             const receitasData = await grist.docApi.fetchTable('Cadastro_de_Receitas'); 
             const composicaoData = await grist.docApi.fetchTable('Receitas'); 
+            const produtosData = await grist.docApi.fetchTable('Produtos');
+            const catalogoData = await grist.docApi.fetchTable('Catalogo_Filial');
 
+            // 1. Mapear Filiais
             const datalistFiliais = document.getElementById('lista-filiais');
             if(filiaisData.id) {
                 const colNomesFiliais = filiaisData.Nome || filiaisData.Filial || filiaisData.id;
@@ -189,6 +218,7 @@
                 });
             }
 
+            // 2. Mapear Insumos
             const datalistInsumos = document.getElementById('lista-insumos');
             if(insumosData.Nome) {
                 insumosData.Nome.forEach((nome, index) => { 
@@ -197,20 +227,29 @@
                     mapaNomes['Insumos'][idInsumo] = nome; 
                     
                     datalistInsumos.innerHTML += `<option value="${nome}">`; 
-                    if(insumosData.Unidade) {
-                        mapaUnidades['Insumo'][nome] = insumosData.Unidade[index];
-                    }
+                    if(insumosData.Unidade) mapaUnidades['Insumo'][nome] = insumosData.Unidade[index];
                 });
             }
 
-            const datalistReceitas = document.getElementById('lista-receitas');
+            // 3. Mapear Receitas Base
+            const selectReceitasExistentes = document.getElementById('nome_receita_existente');
+            const datalistReceitas = document.getElementById('lista-receitas-base');
+            selectReceitasExistentes.innerHTML = '<option value="" disabled selected>Selecione uma receita...</option>';
+            
             if(receitasData.Nome_da_Receita) {
-                receitasData.Nome_da_Receita.forEach((nome, index) => { 
+                // Ordenar alfabeticamente para o Select
+                let receitasOrdenadas = receitasData.Nome_da_Receita.map((nome, i) => ({nome, index: i})).sort((a, b) => a.nome.localeCompare(b.nome));
+
+                receitasOrdenadas.forEach(item => { 
+                    const nome = item.nome;
+                    const index = item.index;
                     const idReceita = receitasData.id[index];
+                    
                     mapaIds['Receitas'][nome] = idReceita;
                     mapaNomes['Receitas'][idReceita] = nome; 
                     
-                    datalistReceitas.innerHTML += `<option value="${nome}">`; 
+                    datalistReceitas.innerHTML += `<option value="${nome}">`;
+                    selectReceitasExistentes.innerHTML += `<option value="${nome}">${nome}</option>`; 
                     
                     let und = receitasData.Unidade ? receitasData.Unidade[index] : '';
                     let rend = receitasData.Rendimento_Total ? receitasData.Rendimento_Total[index] : ''; 
@@ -220,10 +259,10 @@
                 });
             }
 
+            // 4. Mapear Composição (Ingredientes da Receita)
             if (composicaoData.ID_Nome) {
                 composicaoData.ID_Nome.forEach((idBaseRaw, index) => {
                     let idBase = Array.isArray(idBaseRaw) ? idBaseRaw[0] : idBaseRaw;
-                    
                     if (!composicaoReceitas[idBase]) composicaoReceitas[idBase] = [];
 
                     let idInsumo = composicaoData.Insumo ? composicaoData.Insumo[index] : null;
@@ -242,13 +281,28 @@
                 });
             }
 
+            // 5. Mapear Produtos existentes para evitar duplicação
+            if (produtosData.Nome) {
+                produtosData.Nome.forEach((nome, index) => {
+                    mapaIds['Produtos'][nome] = produtosData.id[index];
+                });
+            }
+
+            // 6. Mapear Catálogo existente para evitar duplicação (Chave = ID_Filial + "_" + ID_Produto)
+            if (catalogoData.Filial && catalogoData.Produto) {
+                catalogoData.id.forEach((id, index) => {
+                    let idF = Array.isArray(catalogoData.Filial[index]) ? catalogoData.Filial[index][0] : catalogoData.Filial[index];
+                    let idP = Array.isArray(catalogoData.Produto[index]) ? catalogoData.Produto[index][0] : catalogoData.Produto[index];
+                    mapaIds['Catalogo'][`${idF}_${idP}`] = id;
+                });
+            }
+
+            // 7. Carregar Categorias
             let categoriasEncontradas = [];
             try {
                 const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
                 const columnsInfo = await grist.docApi.fetchTable('_grist_Tables_column');
-                
                 const indexTabela = tablesInfo.tableId.indexOf('Catalogo_Filial');
-                
                 if (indexTabela !== -1) {
                     const idTabela = tablesInfo.id[indexTabela];
                     for (let i = 0; i < columnsInfo.colId.length; i++) {
@@ -262,15 +316,10 @@
                         }
                     }
                 }
-            } catch (e) {
-                console.warn("Aviso: Não foi possível ler as opções nativas.", e);
-            }
+            } catch (e) {}
 
             if (categoriasEncontradas.length === 0) {
-                const catalogoData = await grist.docApi.fetchTable('Catalogo_Filial');
-                if (catalogoData.Categoria) {
-                    categoriasEncontradas = [...new Set(catalogoData.Categoria.filter(Boolean))];
-                }
+                if (catalogoData.Categoria) categoriasEncontradas = [...new Set(catalogoData.Categoria.filter(Boolean))];
             }
 
             const selectCategoria = document.getElementById('categoria');
@@ -283,7 +332,7 @@
             document.getElementById('form-produtos').style.display = 'block';
 
         } catch (error) {
-            console.error("Erro ao carregar dados do Grist:", error);
+            console.error(error);
             document.getElementById('status-loading').innerText = "Erro ao ler banco de dados: " + error.message;
             document.getElementById('status-loading').style.color = "red";
         }
@@ -291,37 +340,56 @@
 
     carregarDadosDoBanco();
 
-    // Trava Visual (UI) da Composição
-    function travarIngredientes(travar) {
-        const container = document.getElementById('lista-ingredientes-container');
-        const inputs = container.querySelectorAll('input, select, button');
-        
-        inputs.forEach(el => {
-            el.disabled = travar;
-            if (travar) {
-                el.classList.add('readonly-field');
-            } else {
-                el.classList.remove('readonly-field');
-            }
-        });
-        
-        document.getElementById('btn-add-ingrediente').style.display = travar ? 'none' : 'block';
-        document.getElementById('aviso-receita-existente').style.display = travar ? 'block' : 'none';
-    }
-
-    function verificarReceitaExistente() {
-        const nomeReceita = document.getElementById('nome_receita').value;
+    // Lógica da UI para alternar entre Nova vs Existente
+    function alternarModo() {
+        const modo = document.querySelector('input[name="modo_receita"]:checked').value;
+        const inputNova = document.getElementById('nome_receita_nova');
+        const selectExistente = document.getElementById('nome_receita_existente');
         const inputRend = document.getElementById('rendimento_receita');
         const selectUnd = document.getElementById('unidade_receita');
         const containerIngredientes = document.getElementById('lista-ingredientes-container');
 
-        if (nomeReceita === ultimaReceitaSelecionada) return;
-        ultimaReceitaSelecionada = nomeReceita;
+        if (modo === 'nova') {
+            document.getElementById('container-receita-nova').style.display = 'block';
+            document.getElementById('container-receita-existente').style.display = 'none';
+            inputNova.required = true;
+            selectExistente.required = false;
 
+            // Destrava campos
+            inputRend.value = '';
+            inputRend.readOnly = false;
+            inputRend.classList.remove('readonly-field');
+            selectUnd.disabled = false;
+            selectUnd.classList.remove('readonly-field');
+
+            travarIngredientes(false);
+            containerIngredientes.innerHTML = '';
+            adicionarLinhaIngrediente();
+        } else {
+            document.getElementById('container-receita-nova').style.display = 'none';
+            document.getElementById('container-receita-existente').style.display = 'block';
+            inputNova.required = false;
+            selectExistente.required = true;
+
+            // Chama a rotina para carregar se houver algo selecionado
+            carregarReceitaSelecionada();
+        }
+    }
+
+    function carregarReceitaSelecionada() {
+        const nomeReceita = document.getElementById('nome_receita_existente').value;
+        if (!nomeReceita) return;
+
+        const inputRend = document.getElementById('rendimento_receita');
+        const selectUnd = document.getElementById('unidade_receita');
+        const containerIngredientes = document.getElementById('lista-ingredientes-container');
+
+        // Preenche info automaticamente
         if (dadosReceitasBase[nomeReceita]) {
             inputRend.value = dadosReceitasBase[nomeReceita].rendimento;
             selectUnd.value = dadosReceitasBase[nomeReceita].unidade;
             
+            // Trava para evitar edição acidental na base existente
             inputRend.readOnly = true;
             inputRend.classList.add('readonly-field');
             selectUnd.disabled = true;
@@ -337,34 +405,28 @@
                     const tipoMapa = item.tipo === 'Insumo' ? 'Insumos' : 'Receitas';
                     const nomeDoItem = mapaNomes[tipoMapa][item.idItem];
                     
-                    if (nomeDoItem) {
-                        adicionarLinhaIngrediente(nomeDoItem, item.tipo, item.qtd);
-                    }
+                    if (nomeDoItem) adicionarLinhaIngrediente(nomeDoItem, item.tipo, item.qtd);
                 });
             } else {
-                // Caso a receita exista mas não tenha ingredientes salvos
                 adicionarLinhaIngrediente('-', 'Insumo', 0);
             }
             
-            // Ativa a trava de edição
             travarIngredientes(true);
-
-        } else {
-            // Nova receita (destrava os campos)
-            travarIngredientes(false);
-            
-            if (inputRend.readOnly) {
-                inputRend.value = '';
-                inputRend.readOnly = false;
-                inputRend.classList.remove('readonly-field');
-                
-                selectUnd.disabled = false;
-                selectUnd.classList.remove('readonly-field');
-                
-                containerIngredientes.innerHTML = '';
-                adicionarLinhaIngrediente();
-            }
         }
+    }
+
+    function travarIngredientes(travar) {
+        const container = document.getElementById('lista-ingredientes-container');
+        const inputs = container.querySelectorAll('input, select, button');
+        
+        inputs.forEach(el => {
+            el.disabled = travar;
+            if (travar) el.classList.add('readonly-field');
+            else el.classList.remove('readonly-field');
+        });
+        
+        document.getElementById('btn-add-ingrediente').style.display = travar ? 'none' : 'block';
+        document.getElementById('aviso-receita-existente').style.display = travar ? 'block' : 'none';
     }
 
     function toggleAntecedencia() {
@@ -390,7 +452,7 @@
         div.className = 'ingrediente-row';
         div.id = `ingrediente-${idLinha}`;
         
-        const listTarget = tipoVal === 'Insumo' ? 'lista-insumos' : 'lista-receitas';
+        const listTarget = tipoVal === 'Insumo' ? 'lista-insumos' : 'lista-receitas-base';
         const selectInsumo = tipoVal === 'Insumo' ? 'selected' : '';
         const selectSub = tipoVal === 'Sub_Receita' ? 'selected' : '';
 
@@ -420,9 +482,7 @@
         `;
         container.appendChild(div);
 
-        if (nomeVal !== '' && nomeVal !== '-') {
-            atualizarUnidade(idLinha);
-        }
+        if (nomeVal !== '' && nomeVal !== '-') atualizarUnidade(idLinha);
     }
 
     function adicionarVariacao() {
@@ -458,7 +518,7 @@
         if (selectElement.value === 'Insumo') {
             inputNome.setAttribute('list', 'lista-insumos');
         } else {
-            inputNome.setAttribute('list', 'lista-receitas');
+            inputNome.setAttribute('list', 'lista-receitas-base');
         }
         inputNome.value = ""; 
         atualizarUnidade(idLinha);
@@ -484,7 +544,12 @@
         e.preventDefault();
 
         const filialNome = document.getElementById('filial').value;
-        const nomeReceita = document.getElementById('nome_receita').value;
+        
+        // Determina o nome da receita com base no Modo selecionado
+        const modo = document.querySelector('input[name="modo_receita"]:checked').value;
+        const nomeReceita = modo === 'nova' ? document.getElementById('nome_receita_nova').value.trim() : document.getElementById('nome_receita_existente').value;
+        const receitaJaExistia = (modo === 'existente');
+
         const rendimentoReceita = parseFloat(document.getElementById('rendimento_receita').value);
         const unidadeReceita = document.getElementById('unidade_receita').value;
         const produtoBase = document.getElementById('produto_base').value;
@@ -499,9 +564,6 @@
         const btnSubmit = document.querySelector('.btn-submit');
         const linhasIngredientes = document.querySelectorAll('.ingrediente-row');
         const linhasVariacoes = document.querySelectorAll('.variacao-row');
-
-        // Flag crucial de validação para pular a etapa 2
-        let receitaJaExistia = (mapaIds['Receitas'][nomeReceita] !== undefined);
 
         if (!receitaJaExistia && linhasIngredientes.length === 0) {
             alert('Adicione pelo menos um ingrediente para a nova receita!'); return;
@@ -520,30 +582,29 @@
             btnSubmit.innerText = 'Processando...';
             btnSubmit.disabled = true;
             
-            // 1. Processar Cadastro da Receita Base
             let idReceita = mapaIds['Receitas'][nomeReceita];
-            if (!idReceita) {
-                const resultReceita = await grist.docApi.applyUserActions([
-                    ['AddRecord', 'Cadastro_de_Receitas', null, {
-                        'Nome_da_Receita': nomeReceita,
-                        'Rendimento_Total': rendimentoReceita, 
-                        'Unidade': unidadeReceita
-                    }]
-                ]);
-                
-                idReceita = extrairId(resultReceita);
 
-                if (!idReceita || typeof idReceita !== 'number') {
-                    const dadosAtuais = await grist.docApi.fetchTable('Cadastro_de_Receitas');
-                    const idx = dadosAtuais.Nome_da_Receita.lastIndexOf(nomeReceita);
-                    if (idx !== -1) idReceita = dadosAtuais.id[idx];
-                    else throw new Error("Erro de comunicação: Não foi possível obter o ID da nova Receita.");
-                }
-                mapaIds['Receitas'][nomeReceita] = idReceita; 
-            }
-
-            // 2. Processar Ingredientes (TRAVADO SE A RECEITA JÁ EXISTIA)
+            // 1 e 2: Lançamento de Receita e Ingredientes (APENAS SE FOR NOVA)
             if (!receitaJaExistia) {
+                if (!idReceita) {
+                    const resultReceita = await grist.docApi.applyUserActions([
+                        ['AddRecord', 'Cadastro_de_Receitas', null, {
+                            'Nome_da_Receita': nomeReceita,
+                            'Rendimento_Total': rendimentoReceita, 
+                            'Unidade': unidadeReceita
+                        }]
+                    ]);
+                    
+                    idReceita = extrairId(resultReceita);
+                    if (!idReceita || typeof idReceita !== 'number') {
+                        const dadosAtuais = await grist.docApi.fetchTable('Cadastro_de_Receitas');
+                        const idx = dadosAtuais.Nome_da_Receita.lastIndexOf(nomeReceita);
+                        if (idx !== -1) idReceita = dadosAtuais.id[idx];
+                        else throw new Error("Erro de comunicação: Não foi possível obter o ID da nova Receita.");
+                    }
+                    mapaIds['Receitas'][nomeReceita] = idReceita; 
+                }
+
                 const acoesIngredientes = [];
                 for(let linha of linhasIngredientes) {
                     const nomeIng = linha.querySelector('.ing-nome').value;
@@ -554,12 +615,12 @@
 
                     if (tipo === 'Insumo') {
                         const idInsumo = mapaIds['Insumos'][nomeIng];
-                        if(!idInsumo) throw new Error(`Insumo '${nomeIng}' não existe no sistema. Crie-o primeiro.`);
+                        if(!idInsumo) throw new Error(`Insumo '${nomeIng}' não existe no sistema.`);
                         camposComposicao['Insumo'] = idInsumo;
                         camposComposicao['Quantidade'] = qtd; 
                     } else {
                         const idSubReceita = mapaIds['Receitas'][nomeIng];
-                        if(!idSubReceita) throw new Error(`Sub-receita '${nomeIng}' não existe no sistema. Crie-a primeiro.`);
+                        if(!idSubReceita) throw new Error(`Sub-receita '${nomeIng}' não existe no sistema.`);
                         camposComposicao['Sub_Receita'] = idSubReceita;
                         camposComposicao['Quantidade_Usada'] = qtd; 
                     }
@@ -567,75 +628,70 @@
                     acoesIngredientes.push(['AddRecord', 'Receitas', null, camposComposicao]);
                 };
 
-                if (acoesIngredientes.length > 0) {
-                    await grist.docApi.applyUserActions(acoesIngredientes);
-                }
-            } else {
-                console.log("Receita já existia no banco. Etapa de composição ignorada para evitar duplicidade.");
+                if (acoesIngredientes.length > 0) await grist.docApi.applyUserActions(acoesIngredientes);
             }
 
-            // 3 e 4. Processar Produtos (Tamanhos) e Catálogo dinâmicos
+            // 3 e 4. Processar Produtos (Tamanhos) e Catálogo (PREVENINDO DUPLICAÇÕES)
             for (let row of linhasVariacoes) {
                 const siglaTamanho = row.querySelector('.var-sigla').value.trim();
                 const descTamanho = row.querySelector('.var-desc').value.trim();
                 
-                // Pega a quantidade digitada pelo usuário (Ex: 16)
                 const qtdRendimento = parseFloat(row.querySelector('.var-rendimento-qtd').value);
-                
-                // Calcula o Fator de Rendimento automaticamente.
-                // Ex: Se rende 16, o fator é 1 / 16 = 0.0625.
-                // Usamos toFixed(6) para evitar dízimas periódicas infinitas gigantes.
                 const fatorRendimento = parseFloat((1 / qtdRendimento).toFixed(6));
                 
                 const nomeFinalProduto = `${produtoBase} ${siglaTamanho}`.trim();
 
-                const resultProd = await grist.docApi.applyUserActions([
-                    ['AddRecord', 'Produtos', null, {
-                        'Nome': nomeFinalProduto,
-                        'Receita': idReceita, 
-                        'Fator_de_Rendimento': fatorRendimento
-                    }]
-                ]);
-                
-                let idProduto = extrairId(resultProd);
+                // Verifica se o Produto já existe no sistema globalmente
+                let idProduto = mapaIds['Produtos'][nomeFinalProduto];
 
-                if (!idProduto || typeof idProduto !== 'number') {
-                    const prodData = await grist.docApi.fetchTable('Produtos');
-                    const idxProd = prodData.Nome.lastIndexOf(nomeFinalProduto);
-                    if (idxProd !== -1) idProduto = prodData.id[idxProd];
-                    else throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
+                if (!idProduto) {
+                    // Produto novo, cria o registro
+                    const resultProd = await grist.docApi.applyUserActions([
+                        ['AddRecord', 'Produtos', null, {
+                            'Nome': nomeFinalProduto,
+                            'Receita': idReceita, 
+                            'Fator_de_Rendimento': fatorRendimento
+                        }]
+                    ]);
+                    
+                    idProduto = extrairId(resultProd);
+                    if (!idProduto || typeof idProduto !== 'number') {
+                        const prodData = await grist.docApi.fetchTable('Produtos');
+                        const idxProd = prodData.Nome.lastIndexOf(nomeFinalProduto);
+                        if (idxProd !== -1) idProduto = prodData.id[idxProd];
+                        else throw new Error(`Falha ao recuperar o ID gerado para o produto ${nomeFinalProduto}.`);
+                    }
+                    mapaIds['Produtos'][nomeFinalProduto] = idProduto; // Registra em cache para o próximo loop
                 }
 
-                await grist.docApi.applyUserActions([
-                    ['AddRecord', 'Catalogo_Filial', null, {
-                        'Filial': idFilial,      
-                        'Produto': idProduto,
-                        'Nome_Produto': nomeProdutoCatalogo,    
-                        'Categoria': categoria,
-                        'Tipo_Venda': tipoVenda,
-                        'Dias_Antecedencia': diasAntecedencia,
-                        'Data_Limite_Pedido': dataLimite,
-                        'Tamanho': descTamanho
-                    }]
-                ]);
+                // Verifica se o Produto já está no catálogo dessa filial
+                const chaveCatalogo = `${idFilial}_${idProduto}`;
+                if (!mapaIds['Catalogo'][chaveCatalogo]) {
+                    // Se não estiver, adiciona ao Catálogo
+                    const resultCat = await grist.docApi.applyUserActions([
+                        ['AddRecord', 'Catalogo_Filial', null, {
+                            'Filial': idFilial,      
+                            'Produto': idProduto,
+                            'Nome_Produto': nomeProdutoCatalogo,    
+                            'Categoria': categoria,
+                            'Tipo_Venda': tipoVenda,
+                            'Dias_Antecedencia': diasAntecedencia,
+                            'Data_Limite_Pedido': dataLimite,
+                            'Tamanho': descTamanho
+                        }]
+                    ]);
+                    let idCat = extrairId(resultCat);
+                    if (idCat) mapaIds['Catalogo'][chaveCatalogo] = idCat;
+                }
             }
 
-            alert('Cadastro efetuado com sucesso!');
+            alert('Cadastro processado com sucesso! Os itens que já existiam não foram duplicados.');
             document.getElementById('form-produtos').reset();
             
-            // Restaura estado inicial UI
-            document.getElementById('rendimento_receita').readOnly = false;
-            document.getElementById('rendimento_receita').classList.remove('readonly-field');
-            document.getElementById('unidade_receita').disabled = false;
-            document.getElementById('unidade_receita').classList.remove('readonly-field');
-            ultimaReceitaSelecionada = ''; 
+            // Restaura o formulário para o modo inicial ("Nova Receita")
+            document.querySelector('input[name="modo_receita"][value="nova"]').checked = true;
+            alternarModo();
             toggleAntecedencia(); 
-            travarIngredientes(false); // Reseta a trava
-
-            document.getElementById('lista-ingredientes-container').innerHTML = '';
-            document.getElementById('lista-variacoes-container').innerHTML = '';
-            adicionarLinhaIngrediente(); 
-            adicionarVariacao(); 
 
         } catch (error) {
             console.error(error);
@@ -649,6 +705,7 @@
     adicionarLinhaIngrediente();
     adicionarVariacao();
     toggleAntecedencia(); 
+    alternarModo();
 </script>
 
 </body>
