@@ -201,7 +201,7 @@
 
     const mapaUnidades = { 'Insumo': {}, 'Sub_Receita': {} };
     const dadosReceitasBase = {};
-    const ultimoUsoReceita = {}; // Guarda { categoria, tipo_venda, nome_catalogo } associado à ultima vez que a receita foi usada
+    const ultimoUsoReceita = {}; 
     
     const mapaIds = {
         'Filiais': {}, 'Insumos': {}, 'Receitas': {}, 'Produtos': {}, 'Catalogo': {}  
@@ -209,9 +209,19 @@
     const mapaNomes = { 'Insumos': {}, 'Receitas': {} };
     const composicaoReceitas = {};
 
-    // Gestão de Metadados da Coluna de Categoria
     let categoriasAtuais = [];
     let widgetOptionsOriginais = {}; 
+
+    // Função NOVA para resolver com segurança o formato "Lista de Referências" do Grist 
+    function extractGristId(val) {
+        if (val === null || val === undefined) return null;
+        if (Array.isArray(val)) {
+            if (val.length === 0) return null;
+            if (val[0] === 'L') return val.length > 1 ? val[1] : null;
+            return val[0];
+        }
+        return val;
+    }
 
     function extrairId(resposta) {
         try {
@@ -291,16 +301,15 @@
             // 4. Composição
             if (composicaoData.ID_Nome) {
                 composicaoData.ID_Nome.forEach((idBaseRaw, index) => {
-                    let idBase = Array.isArray(idBaseRaw) ? idBaseRaw[0] : idBaseRaw;
+                    let idBase = extractGristId(idBaseRaw);
+                    if (!idBase) return;
+                    
                     if (!composicaoReceitas[idBase]) composicaoReceitas[idBase] = [];
 
-                    let idInsumo = composicaoData.Insumo ? composicaoData.Insumo[index] : null;
-                    let idSubReceita = composicaoData.Sub_Receita ? composicaoData.Sub_Receita[index] : null;
+                    let idInsumo = extractGristId(composicaoData.Insumo ? composicaoData.Insumo[index] : null);
+                    let idSubReceita = extractGristId(composicaoData.Sub_Receita ? composicaoData.Sub_Receita[index] : null);
                     let qtdInsumo = composicaoData.Quantidade ? composicaoData.Quantidade[index] : null;
                     let qtdSub = composicaoData.Quantidade_Usada ? composicaoData.Quantidade_Usada[index] : null;
-
-                    idInsumo = Array.isArray(idInsumo) ? idInsumo[0] : idInsumo;
-                    idSubReceita = Array.isArray(idSubReceita) ? idSubReceita[0] : idSubReceita;
 
                     if (idInsumo && idInsumo !== 0) {
                         composicaoReceitas[idBase].push({ tipo: 'Insumo', idItem: idInsumo, qtd: qtdInsumo });
@@ -310,37 +319,49 @@
                 });
             }
 
-            // 5. Produtos e Mapeamento Inteligente
+            // 5. Produtos e Mapeamento Inteligente (A Memória!)
             const receitaDoProduto = {}; 
             if (produtosData.Nome) {
                 produtosData.Nome.forEach((nome, index) => {
                     const idProd = produtosData.id[index];
                     mapaIds['Produtos'][nome] = idProd;
                     
-                    let idRec = Array.isArray(produtosData.Receita[index]) ? produtosData.Receita[index][0] : produtosData.Receita[index];
+                    let idRec = extractGristId(produtosData.Receita[index]);
                     if (idRec) receitaDoProduto[idProd] = idRec;
                 });
             }
 
             if (catalogoData.Filial && catalogoData.Produto) {
                 catalogoData.id.forEach((id, index) => {
-                    let idF = Array.isArray(catalogoData.Filial[index]) ? catalogoData.Filial[index][0] : catalogoData.Filial[index];
-                    let idP = Array.isArray(catalogoData.Produto[index]) ? catalogoData.Produto[index][0] : catalogoData.Produto[index];
+                    let idF = extractGristId(catalogoData.Filial[index]);
+                    let idP = extractGristId(catalogoData.Produto[index]);
                     mapaIds['Catalogo'][`${idF}_${idP}`] = id;
                     
                     let idReceitaAssociada = receitaDoProduto[idP];
                     if (idReceitaAssociada) {
-                        // Salva tudo que for util para pré-preencher depois
                         ultimoUsoReceita[idReceitaAssociada] = {
                             categoria: catalogoData.Categoria[index],
                             tipo_venda: catalogoData.Tipo_Venda[index],
-                            nome_catalogo: catalogoData.Nome_Produto[index] // <--- NOVO: Captura o nome no catálogo!
+                            nome_catalogo: catalogoData.Nome_Produto[index]
                         };
+                        
+                        // Captura o nome final real que foi salvo nos Produtos na última vez
+                        const indexProd = produtosData.id.indexOf(idP);
+                        if (indexProd !== -1) {
+                            let nomeCompleto = produtosData.Nome[indexProd] || "";
+                            let tamanho = catalogoData.Tamanho[index] || "";
+                            
+                            if (tamanho && nomeCompleto.endsWith(tamanho)) {
+                                ultimoUsoReceita[idReceitaAssociada].nome_base = nomeCompleto.substring(0, nomeCompleto.lastIndexOf(tamanho)).trim();
+                            } else {
+                                ultimoUsoReceita[idReceitaAssociada].nome_base = nomeCompleto;
+                            }
+                        }
                     }
                 });
             }
 
-            // 6. Carregar Configurações Estruturais da Coluna de Categoria
+            // 6. Categorias
             try {
                 const tablesInfo = await grist.docApi.fetchTable('_grist_Tables');
                 const columnsInfo = await grist.docApi.fetchTable('_grist_Tables_column');
@@ -401,7 +422,6 @@
             selectUnd.disabled = false;
             selectUnd.classList.remove('readonly-field');
             
-            // Limpa sujestões
             document.getElementById('categoria').value = "";
             document.getElementById('tipo_venda').value = "Encomenda";
             document.getElementById('produto_base').value = "";
@@ -424,6 +444,10 @@
         const nomeReceita = document.getElementById('nome_receita_existente').value;
         if (!nomeReceita) return;
 
+        // 1. Sempre sugere inicialmente o Produto Base baseado no nome da receita (Garantia)
+        const inputProdutoBase = document.getElementById('produto_base');
+        if (inputProdutoBase) inputProdutoBase.value = nomeReceita.toUpperCase();
+
         const inputRend = document.getElementById('rendimento_receita');
         const selectUnd = document.getElementById('unidade_receita');
         const containerIngredientes = document.getElementById('lista-ingredientes-container');
@@ -438,44 +462,43 @@
             selectUnd.classList.add('readonly-field');
 
             const idReceita = mapaIds['Receitas'][nomeReceita];
-            const ingredientesDaReceita = composicaoReceitas[idReceita] || [];
 
-            containerIngredientes.innerHTML = ''; 
-            
-            if (ingredientesDaReceita.length > 0) {
-                ingredientesDaReceita.forEach(item => {
-                    const tipoMapa = item.tipo === 'Insumo' ? 'Insumos' : 'Receitas';
-                    const nomeDoItem = mapaNomes[tipoMapa][item.idItem];
-                    if (nomeDoItem) adicionarLinhaIngrediente(nomeDoItem, item.tipo, item.qtd);
-                });
-            } else {
-                adicionarLinhaIngrediente('-', 'Insumo', 0);
-            }
-            travarIngredientes(true);
-
-            // AUTO-PREENCHIMENTO INTELIGENTE DOS NOMES E CATÁLOGO
-            
-            // 1. O Nome Base é sugerido a partir do nome da receita (ex: BOLO DE POTE)
-            document.getElementById('produto_base').value = nomeReceita.toUpperCase();
-
-            // 2. Puxa os dados antigos se houver memória
+            // 2. Aplica toda a memória inteligente encontrada para esta receita
             if (ultimoUsoReceita[idReceita]) {
                 const configAntiga = ultimoUsoReceita[idReceita];
                 
-                if (configAntiga.categoria) {
-                    document.getElementById('categoria').value = configAntiga.categoria;
-                }
+                if (configAntiga.categoria) document.getElementById('categoria').value = configAntiga.categoria;
                 
                 if (configAntiga.tipo_venda) {
                     document.getElementById('tipo_venda').value = configAntiga.tipo_venda;
                     toggleAntecedencia(); 
                 }
 
-                // NOVO: Puxa o último nome de catálogo utilizado!
-                if (configAntiga.nome_catalogo) {
-                    document.getElementById('nome_produto_catalogo').value = configAntiga.nome_catalogo;
-                }
+                if (configAntiga.nome_catalogo) document.getElementById('nome_produto_catalogo').value = configAntiga.nome_catalogo;
+                
+                // Se conseguimos inferir o nome base perfeitamente, sobrepomos a sugestão da linha 1
+                if (configAntiga.nome_base) inputProdutoBase.value = configAntiga.nome_base;
             }
+
+            // 3. Processa Ingredientes com tratamento seguro para evitar erros
+            const ingredientesDaReceita = composicaoReceitas[idReceita] || [];
+            containerIngredientes.innerHTML = ''; 
+            
+            try {
+                if (ingredientesDaReceita.length > 0) {
+                    ingredientesDaReceita.forEach(item => {
+                        const tipoMapa = item.tipo === 'Insumo' ? 'Insumos' : 'Receitas';
+                        const nomeDoItem = mapaNomes[tipoMapa][item.idItem];
+                        if (nomeDoItem) adicionarLinhaIngrediente(nomeDoItem, item.tipo, item.qtd);
+                    });
+                } else {
+                    adicionarLinhaIngrediente('-', 'Insumo', 0);
+                }
+            } catch (e) {
+                console.error("Erro ao desenhar ingredientes:", e);
+            }
+            
+            travarIngredientes(true);
         }
     }
 
@@ -803,7 +826,7 @@
                     const resultProd = await grist.docApi.applyUserActions([
                         ['AddRecord', 'Produtos', null, {
                             'Nome': nomeFinalProduto,
-                            'Receita': idReceita, 
+                            'Receita': ['L', idReceita], 
                             'Fator_de_Rendimento': fatorRendimento
                         }]
                     ]);
