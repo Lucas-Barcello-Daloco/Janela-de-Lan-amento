@@ -201,7 +201,7 @@
 
     const mapaUnidades = { 'Insumo': {}, 'Sub_Receita': {} };
     const dadosReceitasBase = {};
-    const ultimoUsoReceita = {}; // Guarda { categoria, tipo_venda } associado à ultima vez que a receita foi usada
+    const ultimoUsoReceita = {}; // Guarda { categoria, tipo_venda, nome_catalogo } associado à ultima vez que a receita foi usada
     
     const mapaIds = {
         'Filiais': {}, 'Insumos': {}, 'Receitas': {}, 'Produtos': {}, 'Catalogo': {}  
@@ -211,7 +211,7 @@
 
     // Gestão de Metadados da Coluna de Categoria
     let categoriasAtuais = [];
-    let widgetOptionsOriginais = {}; // Preserva as cores e formatações da coluna
+    let widgetOptionsOriginais = {}; 
 
     function extrairId(resposta) {
         try {
@@ -288,7 +288,7 @@
                 });
             }
 
-            // 4. Composição (Ingredientes da Receita)
+            // 4. Composição
             if (composicaoData.ID_Nome) {
                 composicaoData.ID_Nome.forEach((idBaseRaw, index) => {
                     let idBase = Array.isArray(idBaseRaw) ? idBaseRaw[0] : idBaseRaw;
@@ -310,7 +310,7 @@
                 });
             }
 
-            // 5. Produtos e Mapeamento Inteligente (Preenchimento Automático)
+            // 5. Produtos e Mapeamento Inteligente
             const receitaDoProduto = {}; 
             if (produtosData.Nome) {
                 produtosData.Nome.forEach((nome, index) => {
@@ -328,12 +328,13 @@
                     let idP = Array.isArray(catalogoData.Produto[index]) ? catalogoData.Produto[index][0] : catalogoData.Produto[index];
                     mapaIds['Catalogo'][`${idF}_${idP}`] = id;
                     
-                    // Salva a última configuração de categoria/venda associada à receita deste produto
                     let idReceitaAssociada = receitaDoProduto[idP];
                     if (idReceitaAssociada) {
+                        // Salva tudo que for util para pré-preencher depois
                         ultimoUsoReceita[idReceitaAssociada] = {
                             categoria: catalogoData.Categoria[index],
-                            tipo_venda: catalogoData.Tipo_Venda[index]
+                            tipo_venda: catalogoData.Tipo_Venda[index],
+                            nome_catalogo: catalogoData.Nome_Produto[index] // <--- NOVO: Captura o nome no catálogo!
                         };
                     }
                 });
@@ -362,7 +363,6 @@
                 }
             } catch (e) { console.warn("Aviso na leitura de metadados", e); }
 
-            // Se falhar a leitura de metadados, extrai os valores já digitados no catálogo
             if (categoriasAtuais.length === 0 && catalogoData.Categoria) {
                 categoriasAtuais = [...new Set(catalogoData.Categoria.filter(Boolean))];
             }
@@ -381,7 +381,6 @@
 
     carregarDadosDoBanco();
 
-    // Lógica da UI para alternar entre Nova vs Existente
     function alternarModo() {
         const modo = document.querySelector('input[name="modo_receita"]:checked').value;
         const inputNova = document.getElementById('nome_receita_nova');
@@ -402,9 +401,11 @@
             selectUnd.disabled = false;
             selectUnd.classList.remove('readonly-field');
             
-            // Limpa sujestão de catálogo
+            // Limpa sujestões
             document.getElementById('categoria').value = "";
             document.getElementById('tipo_venda').value = "Encomenda";
+            document.getElementById('produto_base').value = "";
+            document.getElementById('nome_produto_catalogo').value = "";
             toggleAntecedencia();
 
             travarIngredientes(false);
@@ -427,7 +428,6 @@
         const selectUnd = document.getElementById('unidade_receita');
         const containerIngredientes = document.getElementById('lista-ingredientes-container');
 
-        // Preenche Receita
         if (dadosReceitasBase[nomeReceita]) {
             inputRend.value = dadosReceitasBase[nomeReceita].rendimento;
             selectUnd.value = dadosReceitasBase[nomeReceita].unidade;
@@ -453,7 +453,12 @@
             }
             travarIngredientes(true);
 
-            // AUTO-PREENCHIMENTO INTELIGENTE DO CATÁLOGO
+            // AUTO-PREENCHIMENTO INTELIGENTE DOS NOMES E CATÁLOGO
+            
+            // 1. O Nome Base é sugerido a partir do nome da receita (ex: BOLO DE POTE)
+            document.getElementById('produto_base').value = nomeReceita.toUpperCase();
+
+            // 2. Puxa os dados antigos se houver memória
             if (ultimoUsoReceita[idReceita]) {
                 const configAntiga = ultimoUsoReceita[idReceita];
                 
@@ -463,7 +468,12 @@
                 
                 if (configAntiga.tipo_venda) {
                     document.getElementById('tipo_venda').value = configAntiga.tipo_venda;
-                    toggleAntecedencia(); // Atualiza UI da antecedência
+                    toggleAntecedencia(); 
+                }
+
+                // NOVO: Puxa o último nome de catálogo utilizado!
+                if (configAntiga.nome_catalogo) {
+                    document.getElementById('nome_produto_catalogo').value = configAntiga.nome_catalogo;
                 }
             }
         }
@@ -480,7 +490,6 @@
             selectCategoria.innerHTML += `<option value="${cat}">${cat}</option>`;
         });
 
-        // Tenta re-selecionar o que estava marcado antes da atualização
         if (valorAtual && categoriasAtuais.includes(valorAtual)) {
             selectCategoria.value = valorAtual;
         }
@@ -544,10 +553,8 @@
         loadingDiv.style.display = 'block';
         
         try {
-            // Atualiza o objeto de metadados
             widgetOptionsOriginais.choices = categoriasAtuais;
             
-            // Envia o comando nativo de edição de esquema de coluna para o Grist
             await grist.docApi.applyUserActions([
                 ['ModifyColumn', 'Catalogo_Filial', 'Categoria', {
                     widgetOptions: JSON.stringify(widgetOptionsOriginais)
@@ -708,9 +715,9 @@
 
         const rendimentoReceita = parseFloat(document.getElementById('rendimento_receita').value);
         const unidadeReceita = document.getElementById('unidade_receita').value;
-        const produtoBase = document.getElementById('produto_base').value;
+        const produtoBase = document.getElementById('produto_base').value.trim();
         
-        const nomeProdutoCatalogo = document.getElementById('nome_produto_catalogo').value;
+        const nomeProdutoCatalogo = document.getElementById('nome_produto_catalogo').value.trim();
         const tipoVenda = document.getElementById('tipo_venda').value;
         const categoria = document.getElementById('categoria').value;
         const diasAntecedencia = tipoVenda === 'Encomenda' ? parseInt(document.getElementById('dias_antecedencia').value) || 0 : 0;
