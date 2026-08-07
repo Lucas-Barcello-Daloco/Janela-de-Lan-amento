@@ -38,13 +38,12 @@
         .box-modo { background: #e8f4f8; padding: 15px; border-radius: 6px; border: 1px solid #bfe0ed; margin-bottom: 20px; }
         .sub-modo-box { background: #fff; padding: 12px; border-radius: 4px; border: 1px solid #d0e3ec; margin-top: 15px; display: none; }
 
-        /* Estilos dos Gerenciadores (Categorias e Acabamentos) */
         .manager-btn { background: #7f8c8d; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; margin-left: 5px; font-size: 12px; height: 35px; white-space: nowrap; }
         .manager-btn:hover { background: #606b6b; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal-box { background: white; padding: 20px; border-radius: 8px; width: 450px; max-width: 90%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         .modal-list { max-height: 200px; overflow-y: auto; margin: 15px 0; border: 1px solid #eee; padding: 5px; border-radius: 4px; }
-        .modal-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f1f1f1; background: #fafafa; margin-bottom: 5px;}
+        .modal-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #f1f1f1; background: #fafafa; margin-bottom: 5px; gap: 8px;}
         .modal-item:last-child { border-bottom: none; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; }
         .btn-close { background: #bdc3c7; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; color: #333; font-weight: bold;}
@@ -52,6 +51,8 @@
         .acabamentos-container { border: 1px solid #ccc; padding: 10px; border-radius: 4px; max-height: 100px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 12px; background: #fff; }
         .acabamentos-container label { font-weight: normal; font-size: 13px; display: flex; align-items: center; gap: 4px; margin-bottom: 0; cursor: pointer;}
         .acabamento-grid { display: grid; grid-template-columns: 2fr 1fr 1.5fr auto; gap: 10px; margin-bottom: 10px; align-items: end; }
+        .checkbox-container { display: flex; align-items: center; gap: 8px; margin-bottom: 15px; background: #f0f4f8; padding: 10px; border-radius: 4px; border: 1px solid #d6e4ed; }
+        .checkbox-container label { margin-bottom: 0; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -102,10 +103,10 @@
                     <label style="font-size: 12px; color: #555;">O que deseja fazer com esta receita?</label>
                     <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
                         <label style="font-size: 13px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="acao_existente" value="adicionar_tamanho" checked onchange="alternarAcaoExistente()"> Adicionar NOVO Tamanho (Novo Produto)
+                            <input type="radio" name="acao_existente" value="adicionar_tamanho" checked onchange="alternarAcaoExistente()"> Adicionar NOVO Tamanho / Variação
                         </label>
                         <label style="font-size: 13px; font-weight: normal; cursor: pointer;">
-                            <input type="radio" name="acao_existente" value="editar_catalogo" onchange="alternarAcaoExistente()"> Editar Catálogo (Imagem, Descrição, Acabamentos)
+                            <input type="radio" name="acao_existente" value="editar_catalogo" onchange="alternarAcaoExistente()"> Editar Catálogo (Categoria, Imagem, Variações)
                         </label>
                     </div>
                 </div>
@@ -129,7 +130,7 @@
 
         <div class="form-group" id="bloco_produto_base">
             <label>Nome Final do Produto Base (Ficha Técnica Ex: BOLO ALFAJOR):</label>
-            <input type="text" id="produto_base" required placeholder="O tamanho será adicionado no final deste nome.">
+            <input type="text" id="produto_base" required placeholder="Se houver tamanho, será adicionado ao final deste nome.">
         </div>
 
         <div id="bloco_vendas_catalogo">
@@ -155,7 +156,7 @@
                         <select id="categoria" required style="flex-grow: 1;">
                             <option value="" disabled selected>Carregando...</option>
                         </select>
-                        <button type="button" class="manager-btn" onclick="abrirGerenciadorCategorias()">⚙️ Editar</button>
+                        <button type="button" class="manager-btn" onclick="abrirGerenciadorCategorias()">⚙️ Editar Lista</button>
                     </div>
                 </div>
             </div>
@@ -169,6 +170,17 @@
                     <label>Data Limite para Pedido (Opcional):</label>
                     <input type="date" id="data_limite">
                 </div>
+            </div>
+        </div>
+
+        <!-- Bloco de Troca de Categoria exclusivo para o Modo de Edição -->
+        <div id="bloco_categoria_edicao" style="display: none;" class="box-modo">
+            <label>Alterar Categoria do Produto:</label>
+            <div style="display: flex; align-items: flex-end; margin-top: 5px;">
+                <select id="categoria_edicao" style="flex-grow: 1;">
+                    <option value="" disabled selected>Selecione a nova categoria...</option>
+                </select>
+                <button type="button" class="manager-btn" onclick="abrirGerenciadorCategorias()">⚙️ Editar Lista</button>
             </div>
         </div>
 
@@ -187,6 +199,11 @@
             <button type="button" class="manager-btn" style="margin: 0;" onclick="abrirGerenciadorAcabamentos()">⚙️ Gerenciar Tabela de Acabamentos</button>
         </div>
         <p class="info-text" id="instrucao-variacoes" style="border-top: 2px solid #ecf0f1; padding-top: 5px; margin-top: 5px;">Adicione os tamanhos disponíveis e selecione os acabamentos pertinentes.</p>
+
+        <div class="checkbox-container" id="container-produto-unico">
+            <input type="checkbox" id="chk_produto_unico" onchange="alternarProdutoUnico()">
+            <label for="chk_produto_unico">Produto Sem Variação de Tamanho (Produto Único / Padrão)</label>
+        </div>
         
         <div id="lista-variacoes-container"></div>
         <button type="button" class="btn-add" id="btn-add-variacao" onclick="adicionarVariacao()">+ Adicionar Tamanho</button>
@@ -199,7 +216,7 @@
 <div id="modal-categorias" class="modal-overlay">
     <div class="modal-box">
         <h3>Gerenciar Categorias</h3>
-        <p class="info-text" style="margin-bottom: 10px;">Adicione ou remova categorias do catálogo.</p>
+        <p class="info-text" style="margin-bottom: 10px;">Adicione, edite o nome ou remova categorias do catálogo.</p>
         <div style="display: flex; gap: 10px;">
             <input type="text" id="nova-categoria-input" placeholder="Nova categoria..." onkeypress="if(event.key === 'Enter') adicionarCategoriaNaLista()">
             <button type="button" class="btn-add" style="margin: 0; padding: 8px 12px;" onclick="adicionarCategoriaNaLista()">Adicionar</button>
@@ -256,6 +273,7 @@
     let categoriasAtuais = [];
     let widgetOptionsOriginais = {}; 
     let dadosGlobaisParaEdicao = { produtos: null, catalogo: null };
+    let cacheItensEmEdicao = [];
     
     let listaAcabamentos = []; 
 
@@ -540,7 +558,7 @@
         
         const btnSalvar = document.getElementById('btn-salvar-acab');
         btnSalvar.innerText = 'Atualizar';
-        btnSalvar.style.background = '#27ae60'; // Verde indicando Update
+        btnSalvar.style.background = '#27ae60';
         
         document.getElementById('btn-cancelar-acab').style.display = 'block';
     }
@@ -553,7 +571,7 @@
         
         const btnSalvar = document.getElementById('btn-salvar-acab');
         btnSalvar.innerText = 'Adicionar';
-        btnSalvar.style.background = '#3498db'; // Volta para Azul
+        btnSalvar.style.background = '#3498db';
         
         document.getElementById('btn-cancelar-acab').style.display = 'none';
     }
@@ -571,7 +589,6 @@
 
         try {
             if (idEdicao) {
-                // Modo Edição Rápida (Update)
                 const idNum = parseInt(idEdicao);
                 await grist.docApi.applyUserActions([
                     ['UpdateRecord', 'Acabamentos', idNum, {
@@ -581,13 +598,11 @@
                     }]
                 ]);
                 
-                // Atualiza no array local
                 const index = listaAcabamentos.findIndex(a => a.id === idNum);
                 if (index !== -1) {
                     listaAcabamentos[index] = { id: idNum, nome: nome, custo: custo, imagem: url };
                 }
             } else {
-                // Modo Criação (Add)
                 const result = await grist.docApi.applyUserActions([
                     ['AddRecord', 'Acabamentos', null, {
                         'Nome_Acabamento': nome,
@@ -667,6 +682,7 @@
             adicionarLinhaIngrediente();
             
             restaurarFormularioVendas();
+            document.getElementById('chk_produto_unico').checked = false;
             document.getElementById('lista-variacoes-container').innerHTML = '';
             adicionarVariacao();
 
@@ -698,10 +714,14 @@
         
         if (acao === 'adicionar_tamanho') {
             restaurarFormularioVendas();
+            document.getElementById('bloco_categoria_edicao').style.display = 'none';
+            document.getElementById('container-produto-unico').style.display = 'flex';
             containerVariacoes.innerHTML = '';
             adicionarVariacao();
         } else {
             esconderFormularioVendasParaEdicao();
+            document.getElementById('bloco_categoria_edicao').style.display = 'block';
+            document.getElementById('container-produto-unico').style.display = 'flex';
             carregarVariacoesParaEdicao();
         }
     }
@@ -709,6 +729,7 @@
     function restaurarFormularioVendas() {
         document.getElementById('bloco_produto_base').style.display = 'block';
         document.getElementById('bloco_vendas_catalogo').style.display = 'block';
+        document.getElementById('container-produto-unico').style.display = 'flex';
         document.getElementById('btn-add-variacao').style.display = 'block';
         document.getElementById('instrucao-variacoes').innerText = "Adicione os tamanhos disponíveis e selecione os acabamentos pertinentes.";
         document.getElementById('btn-submit-form').innerText = "Processar Cadastro Completo";
@@ -717,9 +738,64 @@
     function esconderFormularioVendasParaEdicao() {
         document.getElementById('bloco_produto_base').style.display = 'none';
         document.getElementById('bloco_vendas_catalogo').style.display = 'none';
-        document.getElementById('btn-add-variacao').style.display = 'none';
-        document.getElementById('instrucao-variacoes').innerText = "Edite as informações abaixo. Os campos bloqueados não podem ser alterados nesta tela.";
+        document.getElementById('instrucao-variacoes').innerText = "Edite a categoria, imagens e acabamentos abaixo.";
         document.getElementById('btn-submit-form').innerText = "Salvar Alterações no Catálogo";
+    }
+
+    function alternarProdutoUnico() {
+        const isUnico = document.getElementById('chk_produto_unico').checked;
+        const modo = document.querySelector('input[name="modo_receita"]:checked').value;
+        const acao = document.querySelector('input[name="acao_existente"]:checked')?.value;
+        const isModoEdicao = modo === 'existente' && acao === 'editar_catalogo';
+
+        const btnAdd = document.getElementById('btn-add-variacao');
+        const container = document.getElementById('lista-variacoes-container');
+
+        if (isModoEdicao) {
+            if (isUnico) {
+                const itemBase = cacheItensEmEdicao[0] || {};
+                container.innerHTML = '';
+                adicionarVariacao({
+                    id_catalogo: itemBase.id_catalogo,
+                    id_produto: itemBase.id_produto,
+                    nome_display: itemBase.nome_display,
+                    tamanho: "",
+                    imagem: itemBase.imagem,
+                    descricao: itemBase.descricao,
+                    acabamentos_salvos: itemBase.acabamentos_salvos,
+                    modo_edicao_unico: true
+                });
+            } else {
+                container.innerHTML = '';
+                if (cacheItensEmEdicao.length > 0) {
+                    cacheItensEmEdicao.forEach(item => {
+                        adicionarVariacao({
+                            id_catalogo: item.id_catalogo,
+                            id_produto: item.id_produto,
+                            nome_display: item.nome_display,
+                            tamanho: item.tamanho,
+                            imagem: item.imagem,
+                            descricao: item.descricao,
+                            acabamentos_salvos: item.acabamentos_salvos,
+                            modo_edicao_com_variacoes: true
+                        });
+                    });
+                } else {
+                    adicionarVariacao();
+                }
+            }
+            return;
+        }
+
+        if (isUnico) {
+            btnAdd.style.display = 'none';
+            container.innerHTML = '';
+            adicionarVariacao(null, true);
+        } else {
+            btnAdd.style.display = 'block';
+            container.innerHTML = '';
+            adicionarVariacao(null, false);
+        }
     }
 
     function carregarVariacoesParaEdicao() {
@@ -760,8 +836,10 @@
                 
                 itensCatalogo.push({
                     id_catalogo: idCat,
+                    id_produto: idP,
                     nome_display: nomeProdFull,
                     tamanho: catalogoData.Tamanho[index] || '',
+                    categoria: catalogoData.Categoria[index] || '',
                     imagem: catalogoData.Link_Imagem_Principal ? catalogoData.Link_Imagem_Principal[index] : '',
                     descricao: catalogoData.Descricao ? catalogoData.Descricao[index] : '',
                     acabamentos_salvos: extractGristList(catalogoData.Acabamentos ? catalogoData.Acabamentos[index] : [])
@@ -769,15 +847,24 @@
             }
         });
 
+        cacheItensEmEdicao = itensCatalogo;
         container.innerHTML = '';
+
         if (itensCatalogo.length === 0) {
             container.innerHTML = '<div style="padding:15px; background:#fff3cd; border: 1px solid #ffeeba; color: #856404; border-radius: 4px;">Nenhuma variação desta receita encontrada no catálogo da filial selecionada.</div>';
             return;
         }
 
+        const selectCatEdicao = document.getElementById('categoria_edicao');
+        if (itensCatalogo[0].categoria) {
+            selectCatEdicao.value = itensCatalogo[0].categoria;
+        }
+
+        const todosUnicos = itensCatalogo.every(it => !it.tamanho || it.tamanho.trim() === "");
+        document.getElementById('chk_produto_unico').checked = todosUnicos;
+
         itensCatalogo.forEach(item => adicionarVariacao(item));
     }
-
 
     function carregarReceitaSelecionada() {
         const nomeReceita = document.getElementById('nome_receita_existente').value;
@@ -803,7 +890,10 @@
 
             if (ultimoUsoReceita[idReceita]) {
                 const configAntiga = ultimoUsoReceita[idReceita];
-                if (configAntiga.categoria) document.getElementById('categoria').value = configAntiga.categoria;
+                if (configAntiga.categoria) {
+                    document.getElementById('categoria').value = configAntiga.categoria;
+                    document.getElementById('categoria_edicao').value = configAntiga.categoria;
+                }
                 if (configAntiga.tipo_venda) {
                     document.getElementById('tipo_venda').value = configAntiga.tipo_venda;
                     toggleAntecedencia(); 
@@ -833,31 +923,59 @@
 
     // Blocos de Gerenciador de Categorias
     function atualizarDropdownCategorias() {
-        const selectCategoria = document.getElementById('categoria');
-        const valorAtual = selectCategoria.value; 
-        selectCategoria.innerHTML = '<option value="" disabled selected>Selecione a categoria...</option>';
-        categoriasAtuais.forEach(cat => { selectCategoria.innerHTML += `<option value="${cat}">${cat}</option>`; });
-        if (valorAtual && categoriasAtuais.includes(valorAtual)) selectCategoria.value = valorAtual;
+        const selects = [document.getElementById('categoria'), document.getElementById('categoria_edicao')];
+        selects.forEach(selectCategoria => {
+            if(!selectCategoria) return;
+            const valorAtual = selectCategoria.value; 
+            selectCategoria.innerHTML = '<option value="" disabled selected>Selecione a categoria...</option>';
+            categoriasAtuais.forEach(cat => { selectCategoria.innerHTML += `<option value="${cat}">${cat}</option>`; });
+            if (valorAtual && categoriasAtuais.includes(valorAtual)) selectCategoria.value = valorAtual;
+        });
     }
     function abrirGerenciadorCategorias() { renderizarListaCategoriasUI(); document.getElementById('modal-categorias').style.display = 'flex'; document.getElementById('nova-categoria-input').focus(); }
     function fecharGerenciadorCategorias() { document.getElementById('modal-categorias').style.display = 'none'; document.getElementById('nova-categoria-input').value = ''; }
+    
     function renderizarListaCategoriasUI() {
         const listaUI = document.getElementById('lista-categorias-ui'); listaUI.innerHTML = '';
         if (categoriasAtuais.length === 0) { listaUI.innerHTML = '<p class="info-text" style="padding:10px; text-align:center;">Nenhuma categoria cadastrada.</p>'; return; }
         categoriasAtuais.forEach((cat, index) => {
             const div = document.createElement('div'); div.className = 'modal-item';
-            div.innerHTML = `<span>${cat}</span><button type="button" class="btn-remove" style="padding: 4px 8px; height: 26px;" onclick="removerCategoriaDaLista(${index})">X</button>`;
+            div.innerHTML = `
+                <input type="text" id="cat-edit-input-${index}" value="${cat}" style="padding:4px 8px; font-size:13px; flex-grow:1;">
+                <button type="button" class="manager-btn" style="padding: 4px 8px; height: 28px; margin:0;" onclick="salvarEdicaoNomeCategoria(${index})">OK</button>
+                <button type="button" class="btn-remove" style="padding: 4px 8px; height: 28px;" onclick="removerCategoriaDaLista(${index})">X</button>
+            `;
             listaUI.appendChild(div);
         });
     }
+
+    function salvarEdicaoNomeCategoria(index) {
+        const novoNome = document.getElementById(`cat-edit-input-${index}`).value.trim();
+        if (!novoNome) { alert("O nome da categoria não pode ficar em branco."); return; }
+        
+        const jaExiste = categoriasAtuais.some((c, i) => c.toLowerCase() === novoNome.toLowerCase() && i !== index);
+        if (jaExiste) { alert("Já existe uma categoria com este nome."); return; }
+
+        categoriasAtuais[index] = novoNome;
+        atualizarDropdownCategorias();
+        renderizarListaCategoriasUI();
+    }
+
     function adicionarCategoriaNaLista() {
         const input = document.getElementById('nova-categoria-input'); const novaCat = input.value.trim();
-        if (novaCat && !categoriasAtuais.includes(novaCat)) { categoriasAtuais.push(novaCat); input.value = ''; renderizarListaCategoriasUI(); atualizarDropdownCategorias(); } 
-        else if (categoriasAtuais.includes(novaCat)) { alert('Esta categoria já existe!'); }
+        if (novaCat && !categoriasAtuais.some(c => c.toLowerCase() === novaCat.toLowerCase())) { 
+            categoriasAtuais.push(novaCat); 
+            input.value = ''; 
+            renderizarListaCategoriasUI(); 
+            atualizarDropdownCategorias(); 
+        } 
+        else if (categoriasAtuais.some(c => c.toLowerCase() === novaCat.toLowerCase())) { alert('Esta categoria já existe!'); }
     }
+
     function removerCategoriaDaLista(index) {
         if(confirm(`Tem certeza que deseja remover a categoria "${categoriasAtuais[index]}"?`)) { categoriasAtuais.splice(index, 1); renderizarListaCategoriasUI(); atualizarDropdownCategorias(); }
     }
+
     async function salvarCategoriasNoBanco() {
         const loadingDiv = document.getElementById('cat-loading'); loadingDiv.style.display = 'block';
         try {
@@ -908,7 +1026,7 @@
         if (nomeVal !== '' && nomeVal !== '-') atualizarUnidade(idLinha);
     }
 
-    function adicionarVariacao(dadosEdicao = null) {
+    function adicionarVariacao(dadosEdicao = null, isUnico = false) {
         const container = document.getElementById('lista-variacoes-container');
         const idVar = Date.now() + Math.floor(Math.random() * 1000);
         
@@ -916,12 +1034,20 @@
         div.className = 'variacao-row';
         div.id = `variacao-${idVar}`;
 
-        if (dadosEdicao) {
+        if (dadosEdicao && (dadosEdicao.modo_edicao_unico || dadosEdicao.modo_edicao_com_variacoes || (!dadosEdicao.hasOwnProperty('modo_edicao_unico') && !dadosEdicao.hasOwnProperty('modo_edicao_com_variacoes')))) {
+            const isEdicaoUnico = dadosEdicao.modo_edicao_unico || (document.getElementById('chk_produto_unico') && document.getElementById('chk_produto_unico').checked);
+            const labelTamanho = isEdicaoUnico ? ' - [Tamanho Único]' : (dadosEdicao.tamanho ? ` - [${dadosEdicao.tamanho}]` : ' - [Tamanho Único]');
+            const displayCamposTam = isEdicaoUnico ? 'style="display:none;"' : '';
+
             div.innerHTML = `
                 <div class="var-grid-top">
-                    <div style="grid-column: 1 / 4;">
-                        <label>Produto (Bloqueado p/ Edição)</label>
-                        <input type="text" value="${dadosEdicao.nome_display} - [${dadosEdicao.tamanho}]" class="readonly-field" readonly>
+                    <div style="grid-column: 1 / 3;">
+                        <label>Produto em Edição</label>
+                        <input type="text" value="${dadosEdicao.nome_display}${labelTamanho}" class="readonly-field" readonly>
+                    </div>
+                    <div ${displayCamposTam}>
+                        <label style="font-size: 11px;">Texto Tamanho no Catálogo</label>
+                        <input type="text" class="var-desc-tamanho" value="${dadosEdicao.tamanho || ''}" placeholder="Ex: P (230g)">
                     </div>
                     <div></div>
                 </div>
@@ -929,7 +1055,8 @@
                     <div>
                         <label style="font-size: 11px; color: #666;">Link da Imagem (URL)</label>
                         <input type="text" class="var-link-imagem" value="${dadosEdicao.imagem || ''}" placeholder="https://...">
-                        <input type="hidden" class="var-id-catalogo" value="${dadosEdicao.id_catalogo}"> 
+                        <input type="hidden" class="var-id-catalogo" value="${dadosEdicao.id_catalogo || ''}"> 
+                        <input type="hidden" class="var-id-produto" value="${dadosEdicao.id_produto || ''}"> 
                     </div>
                     <div>
                         <label style="font-size: 11px; color: #666;">Descrição Curta</label>
@@ -944,12 +1071,19 @@
             container.appendChild(div);
             renderAcabamentosUI(`acabamentos-${idVar}`, dadosEdicao.acabamentos_salvos || []);
         } else {
+            const displaySigla = isUnico ? 'style="display:none;"' : '';
+            const displayDesc = isUnico ? 'style="display:none;"' : '';
+            const displayRend = isUnico ? 'style="display:none;"' : '';
+            const valSigla = isUnico ? '' : '';
+            const valDesc = isUnico ? 'Único' : '';
+            const valRend = isUnico ? '1' : '';
+
             div.innerHTML = `
                 <div class="var-grid-top">
-                    <div><label>Sigla (vai pro Nome)</label><input type="text" class="var-sigla" placeholder="Ex: P" required></div>
-                    <div><label>Texto no Catálogo</label><input type="text" class="var-desc-tamanho" placeholder="Ex: P (230g)" required></div>
-                    <div><label>Rende quantas un.?</label><input type="number" class="var-rendimento-qtd" step="0.01" min="0.01" placeholder="Ex: 16" required></div>
-                    <div><button type="button" class="btn-remove" onclick="removerLinha('variacao-${idVar}')">X</button></div>
+                    <div ${displaySigla}><label>Sigla (vai pro Nome)</label><input type="text" class="var-sigla" placeholder="Ex: P" ${isUnico ? '' : 'required'} value="${valSigla}"></div>
+                    <div ${displayDesc}><label>Texto no Catálogo</label><input type="text" class="var-desc-tamanho" placeholder="Ex: P (230g)" ${isUnico ? '' : 'required'} value="${valDesc}"></div>
+                    <div ${displayRend}><label>Rende quantas un.?</label><input type="number" class="var-rendimento-qtd" step="0.01" min="0.01" placeholder="Ex: 16" ${isUnico ? '' : 'required'} value="${valRend}"></div>
+                    <div><button type="button" class="btn-remove" onclick="removerLinha('variacao-${idVar}')" ${isUnico ? 'style="display:none;"' : ''}>X</button></div>
                 </div>
                 <div class="var-grid-bottom">
                     <div>
@@ -1002,6 +1136,7 @@
         const nomeReceita = modo === 'nova' ? document.getElementById('nome_receita_nova').value.trim() : document.getElementById('nome_receita_existente').value;
         const btnSubmit = document.querySelector('.btn-submit');
         const linhasVariacoes = document.querySelectorAll('.variacao-row');
+        const isProdutoUnico = document.getElementById('chk_produto_unico').checked;
 
         try {
             const idFilial = mapaIds['Filiais'][filialNome];
@@ -1015,21 +1150,34 @@
             // ==========================================
             if (modo === 'existente' && acaoExistente === 'editar_catalogo') {
                 const acoesAtualizacao = [];
+                const novaCategoria = document.getElementById('categoria_edicao').value;
                 
                 linhasVariacoes.forEach(row => {
-                    const idCat = parseInt(row.querySelector('.var-id-catalogo').value);
+                    const idCatInput = row.querySelector('.var-id-catalogo');
+                    if (!idCatInput || !idCatInput.value) return;
+
+                    const idCat = parseInt(idCatInput.value);
                     const linkImg = row.querySelector('.var-link-imagem').value.trim();
                     const desc = row.querySelector('.var-descricao-produto').value.trim();
+                    const inputTamanho = row.querySelector('.var-desc-tamanho');
+                    const tamanhoVal = isProdutoUnico ? "" : (inputTamanho ? inputTamanho.value.trim() : "");
                     
                     const checkboxes = row.querySelectorAll('.chk-acabamento:checked');
                     const idsAcabamentos = Array.from(checkboxes).map(chk => parseInt(chk.value));
                     
                     if (idCat) {
-                        acoesAtualizacao.push(['UpdateRecord', 'Catalogo_Filial', idCat, {
+                        let payloadCatalogo = {
                             'Link_Imagem_Principal': linkImg,
                             'Descricao': desc,
+                            'Tamanho': tamanhoVal,
                             'Acabamentos': ['L', ...idsAcabamentos] 
-                        }]);
+                        };
+
+                        if (novaCategoria) {
+                            payloadCatalogo['Categoria'] = novaCategoria;
+                        }
+
+                        acoesAtualizacao.push(['UpdateRecord', 'Catalogo_Filial', idCat, payloadCatalogo]);
                     }
                 });
 
@@ -1038,7 +1186,7 @@
                     alert('Catálogo atualizado com sucesso!');
                     carregarVariacoesParaEdicao(); 
                 } else {
-                    alert('Nenhum item para atualizar.');
+                    alert('Nenhum item válido para atualizar.');
                 }
                 return; 
             }
@@ -1098,10 +1246,20 @@
             }
 
             for (let row of linhasVariacoes) {
-                const siglaTamanho = row.querySelector('.var-sigla').value.trim();
-                const descTamanho = row.querySelector('.var-desc-tamanho').value.trim();
-                const qtdRendimento = parseFloat(row.querySelector('.var-rendimento-qtd').value);
-                const fatorRendimento = parseFloat((1 / qtdRendimento).toFixed(6));
+                let siglaTamanho = "";
+                let descTamanho = "";
+                let fatorRendimento = 1.0;
+
+                if (isProdutoUnico) {
+                    siglaTamanho = "";
+                    descTamanho = "";
+                    fatorRendimento = 1.0;
+                } else {
+                    siglaTamanho = row.querySelector('.var-sigla').value.trim();
+                    descTamanho = row.querySelector('.var-desc-tamanho').value.trim();
+                    const qtdRendimento = parseFloat(row.querySelector('.var-rendimento-qtd').value);
+                    fatorRendimento = parseFloat((1 / qtdRendimento).toFixed(6));
+                }
                 
                 const linkImagem = row.querySelector('.var-link-imagem').value.trim();
                 const descProduto = row.querySelector('.var-descricao-produto').value.trim();
@@ -1109,7 +1267,7 @@
                 const checkboxes = row.querySelectorAll('.chk-acabamento:checked');
                 const idsAcabamentos = Array.from(checkboxes).map(chk => parseInt(chk.value));
 
-                const nomeFinalProduto = `${produtoBase} ${siglaTamanho}`.trim();
+                const nomeFinalProduto = siglaTamanho ? `${produtoBase} ${siglaTamanho}`.trim() : produtoBase;
 
                 let idProduto = mapaIds['Produtos'][nomeFinalProduto];
 
@@ -1151,6 +1309,7 @@
             document.getElementById('form-produtos').reset();
             
             document.querySelector('input[name="modo_receita"][value="nova"]').checked = true;
+            document.getElementById('chk_produto_unico').checked = false;
             alternarModo();
             toggleAntecedencia(); 
 
